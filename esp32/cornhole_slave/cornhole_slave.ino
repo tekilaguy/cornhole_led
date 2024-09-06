@@ -299,10 +299,12 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
     String data = receivedData.substring(2);
     setDefaults(data);
 
+  } else if (receivedData == "GET_INFO") {
+    updateconnectioninfo();
+
   } else {
     Serial.println("Unknown data received");
   }
-  updateconnectioninfo();
 }
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {

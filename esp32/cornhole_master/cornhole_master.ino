@@ -9,6 +9,7 @@
 #include <BLE2902.h>
 #include <Preferences.h>
 #include <ArduinoOTA.h>
+#include <HTTPUpdate.h>
 
 // LED Setup
 #define NUM_LEDS_RING   60
@@ -133,6 +134,7 @@ String macToString(const uint8_t *mac);
 void sendSettings();
 void sendBoard1Info();
 void sendBoard2Info(struct_message board2);
+void startOtaUpdate(String firmwareUrl);
 void singleClick();
 void doubleClick();
 void longPressStart();
@@ -164,7 +166,9 @@ class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
 
-  Serial.println("BLE Device paired");
+    Serial.println("BLE Device paired");
+    //Serial.printf("MTU Size after connection: %d\n", pServer->getPeerMTU());
+
   };
 
   void onDisconnect(BLEServer* pServer) {
@@ -364,7 +368,7 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
     struct_message receivedData;
     memcpy(&receivedData, incomingData, sizeof(receivedData));
     //sendBoard1Info();
-    //sendBoard2Info(receivedData);
+    sendBoard2Info(receivedData);
    } else {
     Serial.println("Unknown data received");
   }
@@ -404,9 +408,6 @@ void setupBT() {
   // Initialize BLE Device
   BLEDevice::init("CornholeBT");
 
-  // Set the desired MTU size before creating the server
-  BLEDevice::setMTU(240);
-
   // Create the BLE Server
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -422,22 +423,24 @@ void setupBT() {
                       BLECharacteristic::PROPERTY_NOTIFY
                     );
 
-  // Creates BLE Descriptor 0x2902: Client Characteristic Configuration Descriptor (CCCD)
+  // Add a Descriptor for the Characteristic (Client Characteristic Configuration Descriptor (CCCD))
   pCharacteristic->addDescriptor(new BLE2902());
 
+  // Set characteristic callback to handle incoming data
   pCharacteristic->setCallbacks(new MyCallbacks());
 
   // Start the service
   pService->start();
-  pServer->startAdvertising();
 
-  // Start advertising
+  // Start advertising after setting up services and characteristics
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+  pAdvertising->setMinPreferred(0x06);  // helps with iPhone connection issues
   pAdvertising->setMinPreferred(0x12);
+  
   BLEDevice::startAdvertising();
+  Serial.println("BLE Device is now advertising");
 }
 
 void setupOta(){
@@ -475,17 +478,10 @@ void setupOta(){
 }
 String dataBuffer = "";
 
-void handleBluetoothData(String data) {
-  dataBuffer += data;  // Append new data to the buffer
-
-  // Process complete commands that end with a semicolon
-  int end = dataBuffer.indexOf(';');
-  while (end != -1) {
-    String command = dataBuffer.substring(0, end);
-    processCommand(command);  // Process each command
-    dataBuffer = dataBuffer.substring(end + 1);  // Remove processed command
-    end = dataBuffer.indexOf(';');  // Look for the next command
-  }
+void handleBluetoothData(String command) {
+ Serial.print("Received Bluetooth data: ");
+  Serial.println(command);
+     processCommand(command);  
 }
 
 void processCommand(String command) {
@@ -634,8 +630,14 @@ void processCommand(String command) {
         sendData("app","Effect",effects[effectIndex]);
 
     } else if (command.startsWith("GET_INFO")) {
+        const char* message = command.c_str();
+        esp_err_t result = esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
         sendBoard1Info();
         sendBoard2Info(board2);
+
+    } else if (command.startsWith("UPDATE")) {
+        //sendBoard1Info();
+        sendData("espNow","OTA","UPDATE");
 
     } else {
         Serial.println("Unknown BLE command");
@@ -756,19 +758,19 @@ void sendBoard2Info(struct_message board2){
     //               board2.batteryVoltage);
 }
 
-void startOtaUpdate(String firmwareUrl) {
-  t_httpUpdate_return ret = ESPhttpUpdate.update(firmwareUrl);
+// void startOtaUpdate(String firmwareUrl) {
+//   t_httpUpdate_return ret = ESPhttpUpdate.update(firmwareUrl);
 
-  switch (ret) {
-    case HTTP_UPDATE_FAILED:
-      Serial.printf("Update failed. Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-      break;
+//   switch (ret) {
+//     case HTTP_UPDATE_FAILED:
+//       Serial.printf("Update failed. Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+//       break;
 
-    case HTTP_UPDATE_OK:
-      Serial.println("Update successful.");
-      break;
-  }
-}
+//     case HTTP_UPDATE_OK:
+//       Serial.println("Update successful.");
+//       break;
+//   }
+// }
 
 void singleClick() {
   if (!lightsOn) {

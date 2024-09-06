@@ -118,11 +118,11 @@ class HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void connectToDevice(BluetoothDevice device) async {
+  Future<void> connectToDevice(BluetoothDevice device) async {
     logger.i("Connecting to device: ${device.name}");
     try {
-      device.connect(autoConnect: false);
-      device.requestMtu(240);
+      await device.connect(autoConnect: false);
+      await device.requestMtu(240);
       manageBluetoothState(device); // Consolidate state management
     } catch (e) {
       logger.e("Cannot connect, exception occurred: $e");
@@ -339,12 +339,10 @@ class HomeScreenState extends State<HomeScreen> {
     sendCommand("GET_SETTINGS");
   }
 
-  void sendCommand(String command) async {
+  Future<void> sendCommand(String command) async {
     //  logger.i("Sending command: $command");
     if (writeCharacteristic != null) {
-      final fullCommand =
-          "$command;"; // Ensure every command ends with a semicolon
-      writeCharacteristic!.write(utf8.encode(fullCommand));
+      writeCharacteristic!.write(utf8.encode(command));
       logger.i("Command sent: $command");
     } else {
       logger.e("Write characteristic is null");
@@ -759,6 +757,10 @@ class InfoScreenState extends State<InfoScreen> {
     homeScreenState?.sendCommand(completeCommand);
   }
 
+  void updateOta() {
+    homeScreenState?.sendCommand("UPDATE");
+  }
+
   void restartBoards() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -836,7 +838,7 @@ class InfoScreenState extends State<InfoScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 20),
-                    buildControlScreen(),
+                    isConnected ? buildControlScreen() : HomeScreen(),
                     const SizedBox(height: 20),
                     StatusIndicators(),
                     const SizedBox(height: 10), // Add some space at the bottom
@@ -952,7 +954,7 @@ class InfoScreenState extends State<InfoScreen> {
                   fontWeight: FontWeight.bold),
             ),
             ElevatedButton(
-              onPressed: restartBoards,
+              onPressed: updateOta,
               child: const Icon(Icons.system_update_alt, size: 30),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -1326,7 +1328,7 @@ class SetupScreenState extends State<SetupScreen> {
                     child: ListView(
                       children: [
                         const SizedBox(height: 20),
-                        buildControlScreen(),
+                        isConnected ? buildControlScreen() : HomeScreen(),
                         const SizedBox(height: 20),
                         StatusIndicators(),
                       ],
@@ -1895,7 +1897,7 @@ class StatusIndicators extends StatelessWidget {
         const Center(
           child: Text(
             '© Bluetrace Entertainment, LLC',
-            style: TextStyle(fontSize: 12, color: Colors.blue),
+            style: TextStyle(fontSize: 12, color: Colors.white),
           ),
         ),
       ],
