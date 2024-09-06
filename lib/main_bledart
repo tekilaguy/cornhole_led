@@ -1,0 +1,468 @@
+import 'dart:convert'; // Required for utf8.encode
+import 'package:flutter/material.dart';
+import 'package:flutter_blue/flutter_blue.dart';
+import 'package:logger/logger.dart';
+import 'dart:async';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: const HomeScreen(),
+      routes: {
+        '/info': (context) => const InfoScreen(),
+      },
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  HomeScreenState createState() => HomeScreenState();
+}
+
+class HomeScreenState extends State<HomeScreen> {
+  final Logger logger = Logger();
+  FlutterBlue flutterBlue = FlutterBlue.instance;
+  List<BluetoothDevice> devicesList = [];
+  late BluetoothDevice connectedDevice;
+  BluetoothCharacteristic? characteristic;
+  bool isConnected = false;
+  int batteryLevel = 0;
+  int brightness = 50; // Initial brightness value
+
+  static const String serviceUUID = "1230829e-5552-40c1-9392-c5a31473e61a";
+  static const String characteristicUUID =
+      "76866fc6-ef85-47be-ab62-e451851381e0";
+
+  @override
+  void initState() {
+    super.initState();
+    scanForDevices();
+  }
+
+  String connectionInfo = "";
+
+  void handleNotification(String value) {
+    setState(() {
+      connectionInfo = value;
+    });
+  }
+
+  void scanForDevices() {
+    flutterBlue.startScan(timeout: const Duration(seconds: 4));
+
+    flutterBlue.scanResults.listen((results) {
+      for (ScanResult r in results) {
+        if (r.device.name.isNotEmpty && !devicesList.contains(r.device)) {
+          setState(() {
+            devicesList.add(r.device);
+          });
+        }
+      }
+    });
+
+    flutterBlue.stopScan();
+  }
+
+  void rescanForDevices() {
+    setState(() {
+      devicesList.clear();
+    });
+    scanForDevices();
+  }
+
+  StreamSubscription<BluetoothDeviceState>? _connectionStateSubscription;
+
+  @override
+  void dispose() {
+    _connectionStateSubscription?.cancel();
+    super.dispose();
+  }
+
+  void connectToDevice(BluetoothDevice device) async {
+    logger.i("Connecting to device: ${device.name}");
+    await device.connect();
+    _connectionStateSubscription = device.state.listen((state) {
+      switch (state) {
+        case BluetoothDeviceState.connected:
+          logger.i("Connected to device: ${device.name}");
+          setState(() {
+            isConnected = true;
+          });
+          discoverServices();
+          break;
+        case BluetoothDeviceState.disconnected:
+          logger.i("Disconnected from device: ${device.name}");
+          setState(() {
+            isConnected = false;
+          });
+          break;
+        default:
+          break;
+      }
+    });
+    connectedDevice = device;
+  }
+
+  void discoverServices() async {
+    List<BluetoothService> services = await connectedDevice.discoverServices();
+    for (var service in services) {
+      if (service.uuid.toString() == serviceUUID) {
+        for (var char in service.characteristics) {
+          if (char.uuid.toString() == characteristicUUID) {
+            characteristic = char;
+            await characteristic!.setNotifyValue(true); // Enable notifications
+            characteristic!.value.listen((value) {
+              handleNotification(utf8.decode(value));
+              logger.i(
+                  "Received notification: ${utf8.decode(value)}"); // Log received data
+            });
+            setState(() {
+              isConnected = true;
+            });
+            logger.i("Connected to device and characteristic found");
+            return;
+          }
+        }
+      }
+    }
+    logger.w("Service or characteristic not found");
+  }
+
+  void disconnectDevice() async {
+    await connectedDevice.disconnect();
+    setState(() {
+      isConnected = false;
+    });
+  }
+
+  void sendCommand(String command) async {
+    if (characteristic != null) {
+      await characteristic!.write(utf8.encode(command), withoutResponse: true);
+      logger.i("Sent command: $command");
+    }
+  }
+
+  void sendEffect(String effect) {
+    sendCommand('effect:$effect');
+  }
+
+  void sendColor(int r, int g, int b) {
+    sendCommand('color:$r,$g,$b');
+  }
+
+  void sendBrightness(int brightnessPercent) {
+    int brightness = (brightnessPercent * 255 / 100).round();
+    sendCommand('brightness:$brightness');
+  }
+
+  void updateBatteryLevel() async {
+    if (characteristic != null) {
+      var value = await characteristic!.read();
+      String batteryValue = utf8.decode(value);
+      setState(() {
+        batteryLevel = int.parse(batteryValue);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Center(
+          child: Text(
+            'Cornhole LED Controller',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+        actions: [
+          Center(
+            child: Row(
+              children: [
+                const Icon(Icons.battery_full),
+                const SizedBox(width: 5),
+                Text('$batteryLevel%'),
+                IconButton(
+                  icon: const Icon(Icons.info),
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/info',
+                        arguments: connectionInfo);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.blue, Colors.black],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SingleChildScrollView(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 20), // Padding before the first section
+                isConnected ? buildControlScreen() : buildDeviceList(),
+                const SizedBox(height: 15),
+              ],
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: rescanForDevices,
+        child: const Icon(Icons.refresh),
+      ),
+    );
+  }
+
+  Widget buildDeviceList() {
+    return ListView.builder(
+      shrinkWrap: true,
+      itemCount: devicesList.length,
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade100,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ListTile(
+            title: Text(
+              devicesList[index].name,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            trailing: ElevatedButton(
+              onPressed: () {
+                connectToDevice(devicesList[index]);
+              },
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.blue,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Connect',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget buildControlScreen() {
+    return Column(
+      children: [
+        buildSection(
+          title: 'Colors',
+          content: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              buildColorButton(255, 0, 0), // Red
+              buildColorButton(0, 255, 0), // Green
+              buildColorButton(0, 0, 255), // Blue
+              buildColorButton(255, 255, 255), // White
+              buildColorButton(255, 165, 0), // Orange
+              buildColorButton(173, 216, 230), // Lt Blue
+              buildColorButton(128, 0, 128), // Purple
+              buildColorButton(0, 0, 0), // Black
+              // Add more color buttons as needed
+              buildEffectButton('Solid Color', 'Solid',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+            ],
+          ),
+        ),
+        const SizedBox(height: 15),
+        buildSection(
+          title: 'Effects',
+          content: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              buildEffectButton('Chase', 'Solid Chase',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+              buildEffectButton('Mirror', 'Mirror Gradient',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+              buildEffectButton('Gradient', 'Gradient Chase',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+              buildEffectButton('Rainbow', 'Rainbow Chase',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+              buildEffectButton('America', 'Red White Blue Chase',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+              buildEffectButton('Long Horns', 'Long Horns',
+                  width: (MediaQuery.of(context).size.width * 0.4) - 20),
+              // Add more effect buttons as needed
+            ],
+          ),
+        ),
+        const SizedBox(height: 15),
+        buildSection(
+          title: 'Brightness',
+          content: Slider(
+            min: 10,
+            max: 100,
+            value: brightness.toDouble(),
+            onChanged: (value) {
+              setState(() {
+                brightness = value.toInt();
+              });
+              sendBrightness(value.toInt());
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildSection({required String title, required Widget content}) {
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.75),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.5),
+            spreadRadius: 5,
+            blurRadius: 7,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      width: MediaQuery.of(context).size.width * 0.9,
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: Column(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(color: Colors.black, fontSize: 24),
+          ),
+          const Divider(
+            color: Colors.black,
+            thickness: 2,
+          ),
+          content,
+        ],
+      ),
+    );
+  }
+
+  Widget buildEffectButton(String label, String effect, {double? width}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      width: width ??
+          MediaQuery.of(context).size.width *
+              0.8, // span the screen with 20px margins
+      child: ElevatedButton(
+        onPressed: () => sendEffect(effect),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          shadowColor: Colors.grey,
+          elevation: 5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          textStyle: const TextStyle(fontSize: 18), // Increased font size
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+
+  Widget buildColorButton(int r, int g, int b) {
+    return Container(
+      margin: const EdgeInsets.all(5), // Adjust margin to fit 4 per row
+      child: ElevatedButton(
+        onPressed: () => sendColor(r, g, b),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Color.fromRGBO(r, g, b, 1),
+          shadowColor: Colors.grey,
+          elevation: 5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding:
+              const EdgeInsets.all(20), // Adjusted padding to fit 4 per row
+          textStyle: const TextStyle(fontSize: 18), // Increased font size
+        ),
+        child: null,
+      ),
+    );
+  }
+}
+
+class InfoScreen extends StatelessWidget {
+  const InfoScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final connectionInfo =
+        ModalRoute.of(context)!.settings.arguments as String?;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Information'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Disconnect Bluetooth'),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Connection Information:',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            connectionInfo != null
+                ? Text(connectionInfo)
+                : const Text('No connection info available'),
+          ],
+        ),
+      ),
+    );
+  }
+}
