@@ -8,6 +8,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <Preferences.h>
+#include <ArduinoOTA.h>
 
 // LED Setup
 #define NUM_LEDS_RING   60
@@ -123,6 +124,7 @@ int previousBrightness;
 void setupWiFi();
 void setupEspNow();
 void setupBT();
+void setupOta();
 void handleBluetoothData(String data);
 void updateBluetoothData(String data);
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len);
@@ -237,7 +239,7 @@ void setup() {
   esp_wifi_set_mac(WIFI_IF_STA, masterMAC);
   setupEspNow();
   setupBT();
-
+  setupOta();
 
   FastLED.addLeds<LED_TYPE, RING_LED_PIN, COLOR_ORDER>(ringLeds, NUM_LEDS_RING).setCorrection(TypicalLEDStrip);
   FastLED.addLeds<LED_TYPE, BOARD_LED_PIN, COLOR_ORDER>(boardLeds, NUM_LEDS_BOARD).setCorrection(TypicalLEDStrip);
@@ -272,6 +274,7 @@ void loop() {
   if (lightsOn) {
     applyEffect(effects[effectIndex]);
   }
+  ArduinoOTA.handle();
 }
 
 void setupWiFi() {
@@ -437,6 +440,39 @@ void setupBT() {
   BLEDevice::startAdvertising();
 }
 
+void setupOta(){
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else {  // U_SPIFFS
+      type = "filesystem";
+    }
+    Serial.println("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      Serial.println("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("End Failed");
+    }
+  });
+
+  ArduinoOTA.begin();  
+}
 String dataBuffer = "";
 
 void handleBluetoothData(String data) {
@@ -718,6 +754,20 @@ void sendBoard2Info(struct_message board2){
     //               board2.ipAddr, 
     //               board2.batteryLevel, 
     //               board2.batteryVoltage);
+}
+
+void startOtaUpdate(String firmwareUrl) {
+  t_httpUpdate_return ret = ESPhttpUpdate.update(firmwareUrl);
+
+  switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.printf("Update failed. Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+      break;
+
+    case HTTP_UPDATE_OK:
+      Serial.println("Update successful.");
+      break;
+  }
 }
 
 void singleClick() {
