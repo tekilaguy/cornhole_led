@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'main.dart';
 
+String receivedMessage = "";
+int totalChunks = 0;
+int receivedChunks = 0;
+
 Logger logger = Logger();
 int _currentIndex = 0;
 bool isConnected = false;

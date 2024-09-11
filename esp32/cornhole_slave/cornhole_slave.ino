@@ -292,9 +292,6 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   } else if (receivedData == "OTAStart") {
     otaStart();
 
-  }else if (receivedData == "CLEAR_ALL") {
-    processCommand(receivedData);
-    
   } else if (receivedData.startsWith("S:")) {
     String data = receivedData.substring(2);
     setDefaults(data);
@@ -303,6 +300,7 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
     updateconnectioninfo();
 
   } else {
+    processCommand(receivedData);
     Serial.println("Unknown data received");
   }
 }
@@ -512,10 +510,12 @@ void processCommand(String command) {
         Serial.println(blockSize);
 
     } else if (command.startsWith("SPEED:")) {
-        sscanf(command.c_str(), "SPEED:%lu", &effectSpeed);
-        preferences.putULong("effectSpeed", effectSpeed);
+        int speed;
+        sscanf(command.c_str(), "SPEED:%lu", &speed);
+        preferences.putULong("effectSpeed", speed);
         Serial.print("Effect speed set to: ");
-        Serial.println(effectSpeed);
+        Serial.println(speed);
+        effectSpeed = speed;
 
     } else if (command.startsWith("CELEB:")) {
         sscanf(command.c_str(), "CELEB:%lu", &irTriggerDuration);

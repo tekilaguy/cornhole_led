@@ -167,8 +167,6 @@ class MyServerCallbacks: public BLEServerCallbacks {
     deviceConnected = true;
 
     Serial.println("BLE Device paired");
-    //Serial.printf("MTU Size after connection: %d\n", pServer->getPeerMTU());
-
   };
 
   void onDisconnect(BLEServer* pServer) {
@@ -258,6 +256,7 @@ void setup() {
   button.attachDoubleClick(doubleClick);
   button.attachLongPressStart(longPressStart);
   powerOnEffect();
+
   Serial.println("Setup completed.");
 }
 
@@ -333,7 +332,9 @@ void setupEspNow() {
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
   } else {
-     Serial.println("Peer added successfully");
+    sendData("espNow","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+    sendData("espNow","Effect",effects[effectIndex]);
+    Serial.println("Peer added successfully");
   }
 }
 
@@ -476,12 +477,28 @@ void setupOta(){
 
   ArduinoOTA.begin();  
 }
-String dataBuffer = "";
+
+String accumulatedData = ""; // Global variable to store accumulated data
 
 void handleBluetoothData(String command) {
- Serial.print("Received Bluetooth data: ");
-  Serial.println(command);
-     processCommand(command);  
+  accumulatedData += command;  // Accumulate the incoming command
+
+  // Check if the accumulated data contains a full command (terminated by ';')
+  int endIndex = accumulatedData.indexOf(';');
+  
+  while (endIndex != -1) {
+    String completeCommand = accumulatedData.substring(0, endIndex);
+    
+    // Process the complete command
+    processCommand(completeCommand);
+    Serial.println("Received full data: " + completeCommand);
+
+    // Remove the processed command from accumulated data
+    accumulatedData = accumulatedData.substring(endIndex + 1);
+    
+    // Check for the next command in the remaining data
+    endIndex = accumulatedData.indexOf(';');
+  }
 }
 
 void processCommand(String command) {
@@ -543,6 +560,7 @@ void processCommand(String command) {
         //strncpy(board2.name, board2Name.c_str(), sizeof(board2.name) - 1);
         //board2.name[sizeof(board2.name) - 1] = '\0'; // Ensure null-termination
         preferences.putString("board2Name", board2Name); 
+        sendData("espNow","B2", board2Name);
         Serial.print("Board 2 Name set to: ");
         Serial.println(board2Name);
 
@@ -566,6 +584,7 @@ void processCommand(String command) {
         preferences.putULong("effectSpeed", effectSpeed);
         Serial.print("Effect speed set to: ");
         Serial.println(effectSpeed);
+        sendData("espNow","SPEED",String(effectSpeed));
 
 
     } else if (command.startsWith("CELEB:")) {
@@ -629,11 +648,11 @@ void processCommand(String command) {
         sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
         sendData("app","Effect",effects[effectIndex]);
 
-    } else if (command.startsWith("GET_INFO")) {
+    } else if (command =="GET_INFO") {
         const char* message = command.c_str();
         esp_err_t result = esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
         sendBoard1Info();
-        sendBoard2Info(board2);
+        
 
     } else if (command.startsWith("UPDATE")) {
         //sendBoard1Info();
@@ -726,7 +745,7 @@ void sendBoard1Info() {
   char data[512];
 
   sprintf(data, "1:n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d;",
-          board1Name,
+            board1Name,
             masterMAC[0], masterMAC[1], masterMAC[2],
             masterMAC[3], masterMAC[4], masterMAC[5],
             ipAddress,
@@ -734,6 +753,8 @@ void sendBoard1Info() {
             (int)readBatteryVoltage());
 
   updateBluetoothData(data);
+    Serial.print("Sending Board 1 to app: ");
+    Serial.println(data);
 }
 
 // Function to send board 2 information via BLE
@@ -756,6 +777,8 @@ void sendBoard2Info(struct_message board2){
     //               board2.ipAddr, 
     //               board2.batteryLevel, 
     //               board2.batteryVoltage);
+    Serial.print("Sending Board 2 to app: ");
+    Serial.println(data);
 }
 
 // void startOtaUpdate(String firmwareUrl) {
@@ -840,8 +863,6 @@ void btPairing(){
     oldDeviceConnected = deviceConnected;
     deviceConnected = false;
   } else {
-    delay (1000);
-
     deviceConnected = true;
     Serial.println("Bluetooth Device paired successfully");
       }

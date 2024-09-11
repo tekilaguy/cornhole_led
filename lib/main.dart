@@ -164,9 +164,80 @@ class HomeScreenState extends State<HomeScreen> {
           notifyCharacteristic = characteristic;
           notifyCharacteristic?.setNotifyValue(true);
           notifyCharacteristic?.value.listen((value) {
-            handleNotification(utf8.decode(value));
+            onValueReceived(value);
           });
         }
+      }
+    }
+  }
+
+  void scanForDevices({bool rescan = false}) {
+    if (rescan) {
+      setState(() {
+        devicesList.clear();
+      });
+    }
+
+    logger.i("Scanning for devices...");
+    FlutterBlue.instance.startScan(timeout: const Duration(seconds: 4));
+    FlutterBlue.instance.scanResults.listen((results) {
+      for (ScanResult r in results) {
+        String deviceName = r.device.name;
+        if (deviceName != null && deviceName.isNotEmpty) {
+          logger.i("Found device: $deviceName");
+          if (deviceName == "CornholeBT" && !isConnected) {
+            logger.i("Attempting to connect to CornholeBT...");
+            connectToDevice(r.device);
+            FlutterBlue.instance.stopScan();
+            return;
+          }
+          if (!devicesList.contains(r.device)) {
+            setState(() {
+              devicesList.add(r.device);
+            });
+          }
+        } else {
+          logger.w("Found device with no name or empty name.");
+        }
+      }
+    }, onError: (error) {
+      logger.e("Scan error: $error");
+    });
+  }
+
+  void disconnectDevice() async {
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
+      setState(() {
+        isConnected = false;
+      });
+    }
+  }
+
+  void onValueReceived(List<int> value) {
+    String data = utf8.decode(value);
+
+    // Extract chunk metadata
+    int separatorIndex = data.indexOf(":");
+    if (separatorIndex != -1) {
+      String chunkInfo = data.substring(0, separatorIndex);
+      String chunkContent = data.substring(separatorIndex + 1);
+
+      int currentChunk = int.parse(chunkInfo.split("/")[0]);
+      totalChunks = int.parse(chunkInfo.split("/")[1]);
+
+      // Append the chunk content
+      receivedMessage += chunkContent;
+      receivedChunks++;
+
+      if (receivedChunks == totalChunks) {
+        // Full message received
+        logger.i("Full message received: $receivedMessage");
+        handleNotification(receivedMessage);
+
+        // Reset for the next message
+        receivedMessage = "";
+        receivedChunks = 0;
       }
     }
   }
@@ -291,58 +362,11 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void scanForDevices({bool rescan = false}) {
-    if (rescan) {
-      setState(() {
-        devicesList.clear();
-      });
-    }
-
-    logger.i("Scanning for devices...");
-    FlutterBlue.instance.startScan(timeout: const Duration(seconds: 4));
-    FlutterBlue.instance.scanResults.listen((results) {
-      for (ScanResult r in results) {
-        String deviceName = r.device.name;
-        if (deviceName != null && deviceName.isNotEmpty) {
-          logger.i("Found device: $deviceName");
-          if (deviceName == "CornholeBT" && !isConnected) {
-            logger.i("Attempting to connect to CornholeBT...");
-            connectToDevice(r.device);
-            FlutterBlue.instance.stopScan();
-            return;
-          }
-          if (!devicesList.contains(r.device)) {
-            setState(() {
-              devicesList.add(r.device);
-            });
-          }
-        } else {
-          logger.w("Found device with no name or empty name.");
-        }
-      }
-    }, onError: (error) {
-      logger.e("Scan error: $error");
-    });
-  }
-
-  void disconnectDevice() async {
-    if (connectedDevice != null) {
-      await connectedDevice!.disconnect();
-      setState(() {
-        isConnected = false;
-      });
-    }
-  }
-
-  void requestCurrentSettings() {
-    // Assuming you have a method to send data over BLE
-    sendCommand("GET_SETTINGS");
-  }
-
   Future<void> sendCommand(String command) async {
     //  logger.i("Sending command: $command");
     if (writeCharacteristic != null) {
-      writeCharacteristic!.write(utf8.encode(command));
+      sendLargeMessage(writeCharacteristic!, (command));
+//      writeCharacteristic!.write(utf8.encode(command));
       logger.i("Command sent: $command");
     } else {
       logger.e("Write characteristic is null");
@@ -350,23 +374,51 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void sendLargeMessage(
+      BluetoothCharacteristic characteristic, String message) async {
+    int chunkSize = 20;
+    int messageLength = message.length;
+    int totalChunks = (messageLength + chunkSize - 1) ~/ chunkSize;
+
+    for (int i = 0; i < totalChunks; i++) {
+      int chunkStart = i * chunkSize;
+      int chunkEnd = chunkStart + chunkSize < messageLength
+          ? chunkStart + chunkSize
+          : messageLength;
+
+      String chunk =
+//          "${i + 1}/$totalChunks:${message.substring(chunkStart, chunkEnd)}";
+          message.substring(chunkStart, chunkEnd);
+
+      List<int> bytes = utf8.encode(chunk);
+      await characteristic.write(bytes);
+      await Future.delayed(
+          Duration(milliseconds: 50)); // Delay to prevent congestion
+    }
+  }
+
   void sendColorIndex(int colorIndex) {
     setState(() {
       activeColorIndex = colorIndex;
     });
-    sendCommand('colorIndex:$colorIndex');
+    sendCommand('colorIndex:$colorIndex;');
   }
 
   void sendEffect(String effect) {
     setState(() {
       activeEffect = effect;
     });
-    sendCommand('Effect:$effect');
+    sendCommand('Effect:$effect;');
   }
 
   void sendBrightness(int brightnessPercent) {
     int brightness = (brightnessPercent * 255 / 100).round();
-    sendCommand('brightness:$brightness');
+    sendCommand('brightness:$brightness;');
+  }
+
+  void requestCurrentSettings() {
+    // Assuming you have a method to send data over BLE
+    sendCommand("GET_SETTINGS;");
   }
 
   void toggleWiFi() {
@@ -374,7 +426,7 @@ class HomeScreenState extends State<HomeScreen> {
       wifiEnabled = !wifiEnabled;
     });
     logger.i("WiFi toggled: ${wifiEnabled ? 'on' : 'off'}");
-    sendCommand('toggleWiFi:${wifiEnabled ? 'on' : 'off'}');
+    sendCommand('toggleWiFi:${wifiEnabled ? 'on' : 'off'};');
   }
 
   void toggleLights() {
@@ -382,7 +434,7 @@ class HomeScreenState extends State<HomeScreen> {
       lightsOn = !lightsOn;
     });
     logger.i("Lights toggled: ${lightsOn ? 'on' : 'off'}");
-    sendCommand('toggleLights:${lightsOn ? 'on' : 'off'}');
+    sendCommand('toggleLights:${lightsOn ? 'on' : 'off'};');
   }
 
   void toggleEspNow() {
@@ -390,11 +442,11 @@ class HomeScreenState extends State<HomeScreen> {
       espNowEnabled = !espNowEnabled;
     });
     logger.i("ESP-NOW toggled: ${espNowEnabled ? 'on' : 'off'}");
-    sendCommand('toggleEspNow:${espNowEnabled ? 'on' : 'off'}');
+    sendCommand('toggleEspNow:${espNowEnabled ? 'on' : 'off'};');
   }
 
   void sendRestart() {
-    sendCommand('sendRestart');
+    sendCommand('sendRestart;');
   }
 
   void updateBatteryLevel() async {
@@ -707,6 +759,7 @@ class InfoScreenState extends State<InfoScreen> {
     lightsOn = args['lightsOn'] as bool? ?? false;
     espNowEnabled = args['espNowEnabled'] as bool? ?? false;
     connectionInfo = args['connectionInfo'] as String? ?? '';
+
     nameBoard1 = args['nameBoard1'] as String? ?? 'Unknown';
     macAddrBoard1 = args['macAddrBoard1'] as String? ?? 'Unknown';
     ipAddrBoard1 = args['ipAddrBoard1'] as String? ?? 'Unknown';
@@ -720,7 +773,7 @@ class InfoScreenState extends State<InfoScreen> {
     batteryVoltageBoard2 = args['batteryVoltageBoard2'] as int? ?? 0;
 
     homeScreenState = args['homeScreenState'] as HomeScreenState?;
-    homeScreenState!.sendCommand('GET_INFO');
+    homeScreenState!.sendCommand('GET_INFO;');
 
     extractConnectionInfo(connectionInfo);
   }
@@ -758,7 +811,7 @@ class InfoScreenState extends State<InfoScreen> {
   }
 
   void updateOta() {
-    homeScreenState?.sendCommand("UPDATE");
+    homeScreenState?.sendCommand("UPDATE;");
   }
 
   void restartBoards() async {
@@ -1129,7 +1182,7 @@ class SetupScreenState extends State<SetupScreen> {
         setState(() {
           isLoading = true; // Show loading indicator
         });
-        homeScreenState!.sendCommand('GET_SETTINGS');
+        homeScreenState!.sendCommand('GET_SETTINGS;');
         setupComplete =
             true; // Set this flag to true after sending GET_SETTINGS
         isLoading = false;
@@ -1218,7 +1271,7 @@ class SetupScreenState extends State<SetupScreen> {
       previousSportEffectColor2 = sportEffectColor2;
     }
     if (commands.isNotEmpty && homeScreenState != null) {
-      final batchCommand = commands.join(';');
+      final batchCommand = '${commands.join(';')};';
       homeScreenState!.sendCommand(batchCommand);
     } else if (commands.isEmpty) {
       logger.i("No changes detected, no commands sent");
@@ -1294,7 +1347,7 @@ class SetupScreenState extends State<SetupScreen> {
 
   void clearSavedVariables() {
     if (homeScreenState != null) {
-      homeScreenState!.sendCommand('CLEAR_ALL');
+      homeScreenState!.sendCommand('CLEAR_ALL;');
       logger.i("Sent command to clear all saved variables on both boards.");
     } else {
       logger.e("HomeScreenState is null, cannot send commands");
