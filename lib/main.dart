@@ -1,6 +1,5 @@
 import 'dart:async'; // Required for Timer
 import 'dart:convert'; // Required for utf8.encode
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:logger/logger.dart';
@@ -8,7 +7,6 @@ import 'package:flutter_blue/flutter_blue.dart';
 import 'package:numberpicker/numberpicker.dart';
 import 'package:quantity_input/quantity_input.dart';
 import 'global.dart';
-import 'package:animated_splash_screen/animated_splash_screen.dart';
 
 void main() {
   runApp(const MyApp());
