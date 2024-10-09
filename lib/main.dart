@@ -5,7 +5,6 @@ import 'info_screen.dart';
 import 'setup_screen.dart';
 import 'ota_screen.dart';
 
-
 void main() {
   runApp(const MyApp());
 }
