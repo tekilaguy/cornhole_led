@@ -4,6 +4,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <BLEDevice.h>
+
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
@@ -103,7 +104,13 @@ bool wifiConnected = false;
 bool usingFallbackAP = false;
 bool wifiEnabled = true; // Variable to toggle WiFi on and off
 
+// Add these declarations
+String espNowDataBuffer = "";
+bool espNowDataReceived = false;
+bool board2DataReceived = false; // Add this at the top with your global variables
+
 // Structure to receive data
+#pragma pack(1)
 typedef struct struct_message {
     char device[10];
     char name[15];
@@ -112,6 +119,7 @@ typedef struct struct_message {
     int batteryLevel;
     int batteryVoltage;
 } struct_message;
+#pragma pack()
 
 // Create a struct_message called board2
 struct_message board2;
@@ -181,6 +189,7 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 
     if (rxValue.length() > 0) {
       handleBluetoothData(rxValue);
+      rxValue = ""; // Clear the value after processing
     }
   }
 };
@@ -257,6 +266,11 @@ void setup() {
   button.attachLongPressStart(longPressStart);
   powerOnEffect();
 
+  strcpy(board2.device, "Board 2");
+  strcpy(board2.name, board2Name.c_str());
+  memcpy(board2.macAddr, slaveMAC, sizeof(slaveMAC));
+  strcpy(board2.ipAddr, WiFi.localIP().toString().c_str());
+
   Serial.println("Setup completed.");
 }
 
@@ -269,14 +283,27 @@ void loop() {
     previousMillisBT = currentMillis;
     btPairing();
   } else {
-      if (rxValue.length() > 0) {
-      //handleBluetoothData(rxValue);
+    if (rxValue.length() > 0) {
+      handleBluetoothData(rxValue);
       rxValue = ""; // Clear the value after processing
     }
   }
+  
+  // Process ESP-NOW data
+  if (espNowDataReceived) {
+    espNowDataReceived = false; // Reset the flag
+    processEspNowData(espNowDataBuffer); // Process the received String data
+  }
+  
+  if (board2DataReceived) {
+    board2DataReceived = false; // Reset the flag
+    sendBoard2Info(board2); // Send the board2 info via BLE
+  }
+  
   if (lightsOn) {
     applyEffect(effects[effectIndex]);
   }
+  
   ArduinoOTA.handle();
 }
 
@@ -339,41 +366,16 @@ void setupEspNow() {
 }
 
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
-  char msg[256];
-  snprintf(msg, sizeof(msg), "Data received from: %02x:%02x:%02x:%02x:%02x:%02x", info->src_addr[0], info->src_addr[1], info->src_addr[2], info->src_addr[3], info->src_addr[4], info->src_addr[5]);
-   
-  String receivedData = String((char*)incomingData).substring(0, len);
-  Serial.println("Received data: " + receivedData);
-
-  int r, g, b, brightness;
-
-  if (receivedData.startsWith("Effect:")) {
-    String effect = receivedData.substring(7);
-    Serial.println("ESP-NOW effect: " + effect);
-    effectIndex = getEffectIndex(effect);
-    applyEffect(effect);
-    sendData("app","Effect",effects[effectIndex]);
-  
-  } else if (sscanf(receivedData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
-    currentColor = CRGB(r, g, b);
-    setColor(currentColor);
-    sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-    Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
- 
-  } else if (receivedData.startsWith("brightness:") && sscanf(receivedData.c_str(), "brightness:%d", &brightness) == 1) {
-    FastLED.setBrightness(brightness);
-    FastLED.show();
-    Serial.printf("Received brightness: %d\n", brightness);
-    sendData("app","brightness", String(brightness));
-  } else if (receivedData == "Board 2") {
-    struct_message receivedData;
-    memcpy(&receivedData, incomingData, sizeof(receivedData));
-    //sendBoard1Info();
-    sendBoard2Info(receivedData);
-   } else {
-    Serial.println("Unknown data received");
+  if (len == sizeof(struct_message)) {
+    // Received data is a struct_message
+    memcpy(&board2, incomingData, sizeof(board2));
+    board2DataReceived = true; // Set the flag
+  } else {
+    // Received data is a String message
+    espNowDataBuffer = String((char*)incomingData).substring(0, len);
+    espNowDataReceived = true; // Set the flag
   }
-} 
+}
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print(" Status: ");
@@ -555,14 +557,12 @@ void processCommand(String command) {
         Serial.print("Board 1 Name set to: ");
         Serial.println(board1Name);
 
-    } else if  (command.startsWith("B2:")) {
-        String board2Name = command.substring(3);
-        //strncpy(board2.name, board2Name.c_str(), sizeof(board2.name) - 1);
-        //board2.name[sizeof(board2.name) - 1] = '\0'; // Ensure null-termination
-        preferences.putString("board2Name", board2Name); 
-        sendData("espNow","B2", board2Name);
+   } else if  (command.startsWith("B2:")) {
+        board2Name = command.substring(3);
+        preferences.putString("board1Name", board1Name);
         Serial.print("Board 2 Name set to: ");
         Serial.println(board2Name);
+        sendData("espNow","B2",String(board2Name));
 
     } else if  (command.startsWith("BRIGHT:")) {
         sscanf(command.c_str(), "BRIGHT:%d", &brightness);
@@ -671,6 +671,38 @@ void updateBluetoothData(String data) {
     pCharacteristic->notify();
     delay(100);
 
+}
+
+void processEspNowData(String receivedData) {
+  int r, g, b, brightness;
+
+  if (receivedData.startsWith("Effect:")) {
+    String effect = receivedData.substring(7);
+    Serial.println("ESP-NOW effect: " + effect);
+    effectIndex = getEffectIndex(effect);
+    applyEffect(effect);
+    sendData("app", "Effect", effects[effectIndex]);
+
+  } else if (sscanf(receivedData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
+    currentColor = CRGB(r, g, b);
+    setColor(currentColor);
+    sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+    Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
+
+  } else if (receivedData.startsWith("brightness:") && sscanf(receivedData.c_str(), "brightness:%d", &brightness) == 1) {
+    FastLED.setBrightness(brightness);
+    FastLED.show();
+    Serial.printf("Received brightness: %d\n", brightness);
+    sendData("app", "brightness", String(brightness));
+
+  } else if (receivedData == "Board 2") {
+    // Handle struct_message data if necessary
+    // sendBoard1Info();
+    // sendBoard2Info(receivedData);
+
+  } else {
+    Serial.println("Unknown data received");
+  }
 }
 
 void sendSettings() {

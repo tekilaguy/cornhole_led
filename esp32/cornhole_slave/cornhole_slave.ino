@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <FastLED.h>
+
 #include <OneButton.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -78,6 +79,7 @@ OneButton button(BUTTON_PIN, true);
 bool irTriggered = false;
 
 // Structure to send data
+#pragma pack(1)
 typedef struct struct_message {
     char device[10];
     char name[15];
@@ -86,6 +88,7 @@ typedef struct struct_message {
     int batteryLevel;
     int batteryVoltage;
 } struct_message;
+#pragma pack()
 
 // Create a struct_message called board2
 struct_message board2;
