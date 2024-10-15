@@ -1,3 +1,4 @@
+//conrnhole_master.ino
 #include <WiFi.h>
 #include <FastLED.h>
 #include <OneButton.h>
@@ -80,6 +81,7 @@ int effectIndex = 0;
 bool lightsOn = true;
 unsigned long previousMillis = 0;
 int chasePosition = 0;
+String currentEffect = "Solid";
 
 // Button Setup
 OneButton button(BUTTON_PIN, true);
@@ -175,6 +177,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
     deviceConnected = true;
 
     Serial.println("BLE Device paired");
+    btPairing();
   };
 
   void onDisconnect(BLEServer* pServer) {
@@ -665,8 +668,12 @@ void processCommand(String command) {
 }
 
 void updateBluetoothData(String data) {
-    // Serial.print("BLE Activity updated with: ");
-    // Serial.println(data);
+    if (!data.endsWith(";")) {
+      data += ";"; 
+    }
+
+    Serial.print("BLE Activity updated with: ");
+    Serial.println(data);
     pCharacteristic->setValue(data);
     pCharacteristic->notify();
     delay(100);
@@ -734,7 +741,7 @@ void sendData(const String& device, const String& type, const String& data) {
   }
   
   if (device == "app" || device == "both") {
-    String message = type + ":" + data;
+    String message = type + ":" + data + ";";
     updateBluetoothData(message);
     Serial.println("Sending to app: " + message);
   }
@@ -897,6 +904,10 @@ void btPairing(){
   } else {
     deviceConnected = true;
     Serial.println("Bluetooth Device paired successfully");
+    delay(100);
+    currentColor = colors[colorIndex];
+    sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+    sendData("app","Effect",effects[effectIndex]);
       }
 }
 

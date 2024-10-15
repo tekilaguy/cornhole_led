@@ -27,6 +27,32 @@ class HomeScreenState extends State<HomeScreen> {
   Timer? reconnectTimer; // Timer to handle reconnection attempts
   static const reconnectDuration = Duration(seconds: 30);
 
+  int getColorIndexFromRGB(int r, int g, int b) {
+    int closestColorIndex = 0;
+    double smallestDistance = double.infinity;
+
+    // Iterate through the list of predefined colors
+    for (int i = 0; i < colors.length; i++) {
+      // Calculate the Euclidean distance between the current color and the given RGB values
+      double distance = (colors[i].red.toDouble() - r.toDouble()) *
+              (colors[i].red.toDouble() - r.toDouble()) +
+          (colors[i].green.toDouble() - g.toDouble()) *
+              (colors[i].green.toDouble() - g.toDouble()) +
+          (colors[i].blue.toDouble() - b.toDouble()) *
+              (colors[i].blue.toDouble() - b.toDouble());
+
+      // If this distance is smaller than the smallestDistance, update the closestColorIndex and smallestDistance
+      if (distance < smallestDistance) {
+        smallestDistance = distance;
+        closestColorIndex = i;
+      }
+    }
+
+    logger.i("Closest color index found: $closestColorIndex");
+    // Return the index of the closest color
+    return closestColorIndex;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -163,23 +189,140 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void onValueReceived(List<int> value) {
-    String data = utf8.decode(value);
+void onValueReceived(List<int> value) {
+  String data = utf8.decode(value);
+  logger.i("Received value: $data");
 
-    // Extract chunk metadata (if applicable)
-    // Handle data processing and message reconstruction
+  // Append the received data to the message buffer
+  receivedMessage += data;
 
-    handleNotification(data);
+  // Check if a complete message (ending with ';') is received
+  int endIndex = receivedMessage.indexOf(";");
+  while (endIndex != -1) {
+    // Extract the complete message (up to the semicolon)
+    String completeMessage = receivedMessage.substring(0, endIndex);
+    logger.i("Full message received: $completeMessage");
+
+    // Handle the full message
+    handleNotification(completeMessage);
+
+    // Remove the processed message from the buffer
+    receivedMessage = receivedMessage.substring(endIndex + 1);
+
+    // Check for more complete messages in the buffer
+    endIndex = receivedMessage.indexOf(";");
   }
-
+}
   void handleNotification(String value) {
     logger.i("Received notification: $value");
 
     try {
       setState(() {
-        // Handle different types of messages based on prefixes
-        // Update global variables accordingly
-        // Update connectionInfo string
+        if (value.startsWith("Color:")) {
+          // Handle color data
+          final rgbValues = value.substring(6).split(',');
+          if (rgbValues.length == 3) {
+            final r = int.parse(rgbValues[0]);
+            final g = int.parse(rgbValues[1]);
+            final b = int.parse(rgbValues[2]);
+            activeColorIndex = getColorIndexFromRGB(r, g, b);
+            logger.i(
+                "Active color set to: R=$r, G=$g, B=$b, Index=$activeColorIndex");
+          } else {
+            logger.w("Color data is incomplete or malformed.");
+          }
+        } else if (value.startsWith("Effect:")) {
+          // Handle effect data
+          activeEffect = value.substring(7);
+          logger.i("Active effect set to: $activeEffect");
+        } else if (value.startsWith("1:") || value.startsWith("2:")) {
+          // Handle board settings
+          final boardId = value.substring(0, 1);
+          final settingsData = value.substring(2).split(';');
+          for (var setting in settingsData) {
+            if (setting.startsWith("n$boardId:")) {
+              if (boardId == "1") {
+                nameBoard1 = setting.substring(3);
+              } else {
+                nameBoard2 = setting.substring(3);
+              }
+            } else if (setting.startsWith("m$boardId:")) {
+              if (boardId == "1") {
+                macAddrBoard1 = setting.substring(3);
+              } else {
+                macAddrBoard2 = setting.substring(3);
+              }
+            } else if (setting.startsWith("i$boardId:")) {
+              if (boardId == "1") {
+                ipAddrBoard1 = setting.substring(3);
+              } else {
+                ipAddrBoard2 = setting.substring(3);
+              }
+            } else if (setting.startsWith("l$boardId:")) {
+              final level = int.parse(setting.substring(3));
+              if (boardId == "1") {
+                batteryLevelBoard1 = level;
+              } else {
+                batteryLevelBoard2 = level;
+              }
+            } else if (setting.startsWith("v$boardId:")) {
+              final voltage = int.parse(setting.substring(3));
+              if (boardId == "1") {
+                batteryVoltageBoard1 = voltage;
+              } else {
+                batteryVoltageBoard2 = voltage;
+              }
+            } else {
+              logger.w("Unexpected setting received: $setting");
+            }
+          }
+        } else if (value.startsWith("S:")) {
+          // Handle settings data
+          final settingsData = value.substring(2).split(';');
+          for (var setting in settingsData) {
+            if (setting.startsWith("SSID:")) {
+              ssid = setting.substring(5);
+              logger.i("SSID set to: $ssid");
+            } else if (setting.startsWith("PW:")) {
+              password = setting.substring(3);
+              logger.i("Password set to: $password");
+            } else if (setting.startsWith("B1:")) {
+              nameBoard1 = setting.substring(3);
+              logger.i("Board 1 Name set to: $nameBoard1");
+            } else if (setting.startsWith("B2:")) {
+              nameBoard2 = setting.substring(3);
+              logger.i("Board 2 Name set to: $nameBoard2");
+            } else if (setting.startsWith("BRIGHT:")) {
+              initialBrightness =
+                  double.tryParse(setting.substring(7)) ?? initialBrightness;
+              logger.i("Brightness set to: $initialBrightness");
+            } else if (setting.startsWith("SIZE:")) {
+              blockSize = double.tryParse(setting.substring(5)) ?? blockSize;
+              logger.i("Size set to: $blockSize");
+            } else if (setting.startsWith("SPEED:")) {
+              effectSpeed =
+                  double.tryParse(setting.substring(6)) ?? effectSpeed;
+              logger.i("Speed set to: $effectSpeed");
+            } else if (setting.startsWith("CELEB:")) {
+              celebrationDuration =
+                  double.tryParse(setting.substring(6)) ?? celebrationDuration;
+              logger.i("Celebration duration set to: $celebrationDuration");
+            } else if (setting.startsWith("TIMEOUT:")) {
+              inactivityTimeout =
+                  double.tryParse(setting.substring(8)) ?? inactivityTimeout;
+              logger.i("Inactivity timeout set to: $inactivityTimeout");
+            } else {
+              logger.w("Unexpected setting received: $setting");
+            }
+          }
+          setupScreenState?.updateUIWithCurrentSettings();
+        } else {
+          logger.w("Unknown notification tag received");
+        }
+
+        // Update connection information display
+        connectionInfo = "$nameBoard1, MAC: $macAddrBoard1, IP: $ipAddrBoard1, "
+            "Battery: $batteryLevelBoard1%, Voltage: $batteryVoltageBoard1 V";
       });
     } catch (e) {
       logger.e("Error handling notification: $e");
