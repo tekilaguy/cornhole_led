@@ -668,16 +668,29 @@ void processCommand(String command) {
 }
 
 void updateBluetoothData(String data) {
-    if (!data.endsWith(";")) {
-      data += ";"; 
+    // Ensure the message ends with a delimiter
+    if (!data.endsWith("#")) {
+        data += "#"; 
     }
 
-    Serial.print("BLE Activity updated with: ");
-    Serial.println(data);
-    pCharacteristic->setValue(data);
-    pCharacteristic->notify();
-    delay(100);
+    const int maxChunkSize = 20;  // Maximum BLE payload size is 20 bytes
+    String message = data;  // Full message to send
+    int totalChunks = (message.length() + maxChunkSize - 1) / maxChunkSize;  // Total number of chunks
 
+    for (int i = 0; i < totalChunks; i++) {
+        int startIdx = i * maxChunkSize;
+        int endIdx = min(startIdx + maxChunkSize, (int)message.length());  // Cast message.length() to int
+
+        String chunk = message.substring(startIdx, endIdx);
+
+        Serial.print("BLE Activity updated with chunk: ");
+        Serial.println(chunk);  // Log the chunk that is being sent
+
+        // Send the chunk instead of the entire message
+        pCharacteristic->setValue(chunk.c_str());  // Convert String to C-string for BLE transmission
+        pCharacteristic->notify();  // Send the chunk via BLE notification
+        delay(20);  // Delay to avoid congestion
+    }
 }
 
 void processEspNowData(String receivedData) {
@@ -741,7 +754,7 @@ void sendData(const String& device, const String& type, const String& data) {
   }
   
   if (device == "app" || device == "both") {
-    String message = type + ":" + data + ";";
+    String message = type + ":" + data + "#";
     updateBluetoothData(message);
     Serial.println("Sending to app: " + message);
   }
@@ -904,10 +917,10 @@ void btPairing(){
   } else {
     deviceConnected = true;
     Serial.println("Bluetooth Device paired successfully");
-    delay(100);
-    currentColor = colors[colorIndex];
-    sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-    sendData("app","Effect",effects[effectIndex]);
+    // delay(100);
+    // currentColor = colors[colorIndex];
+    // sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+    // sendData("app","Effect",effects[effectIndex]);
       }
 }
 
