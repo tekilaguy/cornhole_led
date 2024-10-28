@@ -17,8 +17,7 @@ dependencies:
   file_picker: ^8.1.2
   flutter_colorpicker: ^1.1.0
   numberpicker: ^2.1.2
-  quantity_input: ^1.0.2
-
+ 
 dev_dependencies:
   flutter_test:
     sdk: flutter

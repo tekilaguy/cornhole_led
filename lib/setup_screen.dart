@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:quantity_input/quantity_input.dart';
+import 'package:numberpicker/numberpicker.dart';
 import 'global.dart';
 import 'home_screen.dart';
 import 'widgets/background.dart';
@@ -56,7 +56,8 @@ class SetupScreenState extends State<SetupScreen> {
           isLoading = true; // Show loading indicator
         });
         homeScreenState!.sendCommand('GET_SETTINGS;');
-        setupComplete = true; // Set this flag to true after sending GET_SETTINGS
+        setupComplete =
+            true; // Set this flag to true after sending GET_SETTINGS
         isLoading = false;
       } else {
         logger.e("HomeScreenState is null, cannot request settings");
@@ -497,15 +498,14 @@ class SetupScreenState extends State<SetupScreen> {
           style: const TextStyle(
               color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
         ),
-        QuantityInput(
+        NumberPicker(
           value: initialValue,
           minValue: minValue,
           maxValue: maxValue,
           step: step,
           onChanged: (value) {
-            onChanged(int.parse(value.replaceAll(',', '')));
+            onChanged(value);
           },
-          decoration: const InputDecoration(),
         ),
       ],
     );
