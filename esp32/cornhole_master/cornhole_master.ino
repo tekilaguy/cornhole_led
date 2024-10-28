@@ -15,7 +15,7 @@
 
 // LED Setup
 #define NUM_LEDS_RING   60
-#define NUM_LEDS_BOARD  214
+#define NUM_LEDS_BOARD  216
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
 #define LED_TYPE        WS2812B
