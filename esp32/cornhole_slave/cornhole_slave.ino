@@ -33,8 +33,8 @@ unsigned long effectSpeed = 25; // Replace effectSpeed
 int inactivityTimeout = 30;    // Variable for inactivity timeout
 unsigned long irTriggerDuration = 4000;
 CRGB initialColor = CRGB::Blue;
-CRGB sportsEffectColor1 = CRGB::Red;
-CRGB sportsEffectColor2 = CRGB::Blue;
+CRGB sportsEffectColor1 = CRGB(12,35,64);
+CRGB sportsEffectColor2 = CRGB(241,90,34);
 
 // Button and Sensor Pins
 #define BUTTON_PIN 14

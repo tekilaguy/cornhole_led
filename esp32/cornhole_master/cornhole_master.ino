@@ -44,8 +44,8 @@ unsigned long effectSpeed = 25; // Replace effectSpeed
 int inactivityTimeout = 30;    // Variable for inactivity timeout
 unsigned long irTriggerDuration = 4000;
 CRGB initialColor = CRGB::Blue;
-CRGB sportsEffectColor1 = CRGB(191, 87, 0);
-CRGB sportsEffectColor2 = CRGB::White;
+CRGB sportsEffectColor1 = CRGB(12,35,64);
+CRGB sportsEffectColor2 = CRGB(241,90,34);
 
 unsigned long lastActivityTime = 0;
     
