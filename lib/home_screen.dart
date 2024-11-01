@@ -82,6 +82,7 @@ class HomeScreenState extends State<HomeScreen> {
           connectedDevice = device;
         });
         discoverServices(device);
+        reconnectTimer?.cancel();
       } else if (state == BluetoothDeviceState.disconnected) {
         logger.w("Device disconnected: ${device.name}");
         setState(() {
@@ -191,180 +192,182 @@ class HomeScreenState extends State<HomeScreen> {
 
   void onValueReceived(List<int> value) {
     String data = utf8.decode(value);
-    logger.i("Received value: $data");
+    logger.i("Received partial data: $data");
 
-    // Append the received data to the message buffer
+    // Append to the buffer until a complete message with '#' is received
     receivedMessage += data;
-
-    // Process all complete messages
     int endIndex;
+
+    // Process each complete message
     while ((endIndex = receivedMessage.indexOf("#")) != -1) {
-      // Extract the complete message (up to the semicolon)
       String completeMessage = receivedMessage.substring(0, endIndex);
-      logger.i("Full message received: $completeMessage");
-
-      // Handle the full message
+      logger.i("Complete message: $completeMessage");
       handleNotification(completeMessage);
-
-      // Remove the processed message from the buffer
-      receivedMessage = receivedMessage.substring(endIndex + 1);
+      //receivedMessage = receivedMessage.substring(endIndex + 1);
+      receivedMessage = '';
     }
   }
 
-void handleNotification(String value) {
-  logger.i("Received notification: $value");
+  void handleNotification(String value) {
+    logger.i("Received notification: $value");
 
-  try {
-    setState(() {
-      // Ensure the message ends with `#`
-      if (value.endsWith('#')) {
-        value = value.substring(0, value.length - 1); // Remove the ending '#'
-      } else {
-        logger.w("Message does not end with '#'. Possible incomplete message.");
-        return;
-      }
-
-      // Check if the message is a GET_SETTINGS response (start with "S:")
-      if (value.startsWith("S:")) {
-        handleSettingsResponse(value.substring(2));
-        return;  // Exit after processing settings
-      }
-
-      // Split the entire message by `,` to get field-value pairs
-      List<String> fields = value.split(',');
-      for (var field in fields) {
-        if (field.isEmpty) continue; // Skip empty entries
-
-        // Split each field by `;` (tag;value)
-        List<String> keyValue = field.split(';');
-        if (keyValue.length != 2) {
-          logger.w("Malformed field: $field");
-          continue;
+    try {
+      setState(() {
+        // Ensure the message ends with `#`
+        if (value.endsWith('#')) {
+          value = value.substring(0, value.length - 1); // Remove the ending '#'
+        } else {
+          logger
+              .w("Message does not end with '#'. Possible incomplete message.");
+          return;
         }
 
-        String tag = keyValue[0];
-        String fieldValue = keyValue[1];
-
-        // Extract the board number (second character in the tag)
-        int boardNumber = int.parse(tag[1]);
-
-        // Use the first character of the tag to determine the field
-        String fieldTag = tag[0];
-
-        // Handle the parsed field tag and value for each board
-        switch (fieldTag) {
-          case 'n':
-            if (boardNumber == 1) {
-              nameBoard1 = fieldValue;
-              logger.i("Board 1 Name set to: $nameBoard1");
-            } else if (boardNumber == 2) {
-              nameBoard2 = fieldValue;
-              logger.i("Board 2 Name set to: $nameBoard2");
-            }
-            break;
-
-          case 'm':
-            if (boardNumber == 1) {
-              macAddrBoard1 = fieldValue;
-              logger.i("MAC Addr Board 1 set to: $macAddrBoard1");
-            } else if (boardNumber == 2) {
-              macAddrBoard2 = fieldValue;
-              logger.i("MAC Addr Board 2 set to: $macAddrBoard2");
-            }
-            break;
-
-          case 'i':
-            if (boardNumber == 1) {
-              ipAddrBoard1 = fieldValue;
-              logger.i("IP Addr Board 1 set to: $ipAddrBoard1");
-            } else if (boardNumber == 2) {
-              ipAddrBoard2 = fieldValue;
-              logger.i("IP Addr Board 2 set to: $ipAddrBoard2");
-            }
-            break;
-
-          case 'l':
-            int batteryLevel = int.parse(fieldValue);
-            if (boardNumber == 1) {
-              batteryLevelBoard1 = batteryLevel;
-              logger.i("Battery Level Board 1 set to: $batteryLevelBoard1%");
-            } else if (boardNumber == 2) {
-              batteryLevelBoard2 = batteryLevel;
-              logger.i("Battery Level Board 2 set to: $batteryLevelBoard2%");
-            }
-            break;
-
-          case 'v':
-            int batteryVoltage = int.parse(fieldValue);
-            if (boardNumber == 1) {
-              batteryVoltageBoard1 = batteryVoltage;
-              logger.i("Battery Voltage Board 1 set to: $batteryVoltageBoard1 V");
-            } else if (boardNumber == 2) {
-              batteryVoltageBoard2 = batteryVoltage;
-              logger.i("Battery Voltage Board 2 set to: $batteryVoltageBoard2 V");
-            }
-            break;
-
-          default:
-            logger.w("Unexpected field tag: $fieldTag");
-            break;
+        // Check if the message is a GET_SETTINGS response (start with "S:")
+        if (value.startsWith("S:")) {
+          handleSettingsResponse(value.substring(2));
+          return; // Exit after processing settings
         }
-      }
-    });
-  } catch (e) {
-    logger.e("Error handling notification: $e");
-    setState(() {
-      connectionInfo = "Error parsing notification";
-      isLoading = false; // Stop loading spinner even if there's an error
-    });
+
+        // Split the entire message by `,` to get field-value pairs
+        List<String> fields = value.split(',');
+        for (var field in fields) {
+          if (field.isEmpty) continue; // Skip empty entries
+
+          // Split each field by `;` (tag;value)
+          List<String> keyValue = field.split(';');
+          if (keyValue.length != 2) {
+            logger.w("Malformed field: $field");
+            continue;
+          }
+
+          String tag = keyValue[0];
+          String fieldValue = keyValue[1];
+
+          // Extract the board number (second character in the tag)
+          int boardNumber = int.parse(tag[1]);
+
+          // Use the first character of the tag to determine the field
+          String fieldTag = tag[0];
+
+          // Handle the parsed field tag and value for each board
+          switch (fieldTag) {
+            case 'n':
+              if (boardNumber == 1) {
+                nameBoard1 = fieldValue;
+                logger.i("Board 1 Name set to: $nameBoard1");
+              } else if (boardNumber == 2) {
+                nameBoard2 = fieldValue;
+                logger.i("Board 2 Name set to: $nameBoard2");
+              }
+              break;
+
+            case 'm':
+              if (boardNumber == 1) {
+                macAddrBoard1 = fieldValue;
+                logger.i("MAC Addr Board 1 set to: $macAddrBoard1");
+              } else if (boardNumber == 2) {
+                macAddrBoard2 = fieldValue;
+                logger.i("MAC Addr Board 2 set to: $macAddrBoard2");
+              }
+              break;
+
+            case 'i':
+              if (boardNumber == 1) {
+                ipAddrBoard1 = fieldValue;
+                logger.i("IP Addr Board 1 set to: $ipAddrBoard1");
+              } else if (boardNumber == 2) {
+                ipAddrBoard2 = fieldValue;
+                logger.i("IP Addr Board 2 set to: $ipAddrBoard2");
+              }
+              break;
+
+            case 'l':
+              int batteryLevel = int.parse(fieldValue);
+              if (boardNumber == 1) {
+                batteryLevelBoard1 = batteryLevel;
+                logger.i("Battery Level Board 1 set to: $batteryLevelBoard1%");
+              } else if (boardNumber == 2) {
+                batteryLevelBoard2 = batteryLevel;
+                logger.i("Battery Level Board 2 set to: $batteryLevelBoard2%");
+              }
+              break;
+
+            case 'v':
+              int batteryVoltage = int.parse(fieldValue);
+              if (boardNumber == 1) {
+                batteryVoltageBoard1 = batteryVoltage;
+                logger.i(
+                    "Battery Voltage Board 1 set to: $batteryVoltageBoard1 V");
+              } else if (boardNumber == 2) {
+                batteryVoltageBoard2 = batteryVoltage;
+                logger.i(
+                    "Battery Voltage Board 2 set to: $batteryVoltageBoard2 V");
+              }
+              break;
+
+            default:
+              logger.w("Unexpected field tag: $fieldTag");
+              break;
+          }
+        }
+      });
+    } catch (e) {
+      logger.e("Error handling notification: $e");
+      setState(() {
+        connectionInfo = "Error parsing notification";
+        isLoading = false; // Stop loading spinner even if there's an error
+      });
+    }
   }
-}
 
 // Separate function for handling settings response
-void handleSettingsResponse(String settings) {
-  logger.i("Handling settings response: $settings");
+  void handleSettingsResponse(String settings) {
+    logger.i("Handling settings response: $settings");
 
-  // Split the settings data by ';'
-  List<String> settingsData = settings.split(';');
-  for (var setting in settingsData) {
-    if (setting.isEmpty) continue;
+    // Split the settings data by ';'
+    List<String> settingsData = settings.split(';');
+    for (var setting in settingsData) {
+      if (setting.isEmpty) continue;
 
-    // Handle each setting based on its prefix
-    if (setting.startsWith("SSID:")) {
-      ssid = setting.substring(5);
-      logger.i("SSID set to: $ssid");
-    } else if (setting.startsWith("PW:")) {
-      password = setting.substring(3);
-      logger.i("Password set to: $password");
-    } else if (setting.startsWith("B1:")) {
-      nameBoard1 = setting.substring(3);
-      logger.i("Board 1 Name set to: $nameBoard1");
-    } else if (setting.startsWith("B2:")) {
-      nameBoard2 = setting.substring(3);
-      logger.i("Board 2 Name set to: $nameBoard2");
-    } else if (setting.startsWith("BRIGHT:")) {
-      initialBrightness = double.tryParse(setting.substring(7)) ?? initialBrightness;
-      logger.i("Brightness set to: $initialBrightness");
-    } else if (setting.startsWith("SIZE:")) {
-      blockSize = double.tryParse(setting.substring(5)) ?? blockSize;
-      logger.i("Size set to: $blockSize");
-    } else if (setting.startsWith("SPEED:")) {
-      effectSpeed = double.tryParse(setting.substring(6)) ?? effectSpeed;
-      logger.i("Speed set to: $effectSpeed");
-    } else if (setting.startsWith("CELEB:")) {
-      celebrationDuration = double.tryParse(setting.substring(6)) ?? celebrationDuration;
-      logger.i("Celebration duration set to: $celebrationDuration");
-    } else if (setting.startsWith("TIMEOUT:")) {
-      inactivityTimeout = double.tryParse(setting.substring(8)) ?? inactivityTimeout;
-      logger.i("Inactivity timeout set to: $inactivityTimeout");
-    } else {
-      logger.w("Unexpected setting received: $setting");
+      // Handle each setting based on its prefix
+      if (setting.startsWith("SSID:")) {
+        ssid = setting.substring(5);
+        logger.i("SSID set to: $ssid");
+      } else if (setting.startsWith("PW:")) {
+        password = setting.substring(3);
+        logger.i("Password set to: $password");
+      } else if (setting.startsWith("B1:")) {
+        nameBoard1 = setting.substring(3);
+        logger.i("Board 1 Name set to: $nameBoard1");
+      } else if (setting.startsWith("B2:")) {
+        nameBoard2 = setting.substring(3);
+        logger.i("Board 2 Name set to: $nameBoard2");
+      } else if (setting.startsWith("BRIGHT:")) {
+        initialBrightness =
+            double.tryParse(setting.substring(7)) ?? initialBrightness;
+        logger.i("Brightness set to: $initialBrightness");
+      } else if (setting.startsWith("SIZE:")) {
+        blockSize = double.tryParse(setting.substring(5)) ?? blockSize;
+        logger.i("Size set to: $blockSize");
+      } else if (setting.startsWith("SPEED:")) {
+        effectSpeed = double.tryParse(setting.substring(6)) ?? effectSpeed;
+        logger.i("Speed set to: $effectSpeed");
+      } else if (setting.startsWith("CELEB:")) {
+        celebrationDuration =
+            double.tryParse(setting.substring(6)) ?? celebrationDuration;
+        logger.i("Celebration duration set to: $celebrationDuration");
+      } else if (setting.startsWith("TIMEOUT:")) {
+        inactivityTimeout =
+            double.tryParse(setting.substring(8)) ?? inactivityTimeout;
+        logger.i("Inactivity timeout set to: $inactivityTimeout");
+      } else {
+        logger.w("Unexpected setting received: $setting");
+      }
     }
-  }
 
-  // After settings are processed, update the UI
-  setupScreenState?.updateUIWithCurrentSettings();
-}
+    // After settings are processed, update the UI
+    setupScreenState?.updateUIWithCurrentSettings();
+  }
 
   Future<void> sendCommand(String command) async {
     if (writeCharacteristic != null) {

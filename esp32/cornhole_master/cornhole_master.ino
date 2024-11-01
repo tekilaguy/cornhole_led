@@ -869,19 +869,19 @@ void doubleClick() {
 }
 
 void longPressStart() {
-  btPairing();
-    deviceConnected = false;
+  toggleLights(!lightsOn); // Toggle the light status
+  deviceConnected = false;
 }
 
 void toggleLights(bool status) {
   lightsOn = status;
-  setColor(lightsOn ? currentColor : CRGB::Black);
+  setColor(lightsOn ? currentColor : CRGB::Black); // Set color if on, black if off
   String message = String(status ? "on" : "off");
 
   Serial.print("Lights are: ");
   Serial.println(message);
   
-  sendData("espNow","toggleLights",message);
+  sendData("both","toggleLights",message);
 }
 
 void toggleWiFi(bool status) {

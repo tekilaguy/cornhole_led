@@ -410,21 +410,19 @@ void doubleClick() {
 }
 
 void longPressStart() {
-  String message="Pairing";
-  sendEffectToPeer(message);
-  //toggleLights(bool status);
-//  sendEffectToPeer(effects[effectIndex]);
+  toggleLights(!lightsOn); // Toggle the light status
+  deviceConnected = false;
 }
 
 void toggleLights(bool status) {
   lightsOn = status;
-  setColor(lightsOn ? currentColor : CRGB::Black);
-  String command = String("toggleLights:") + (status ? "on" : "off");
+  setColor(lightsOn ? currentColor : CRGB::Black); // Set color if on, black if off
+  String message = String(status ? "on" : "off");
 
   Serial.print("Lights are: ");
-  Serial.println (command);
+  Serial.println(message);
   
-  //sendEffectToPeer(command);
+  sendData("both","toggleLights",message);
 }
 
 void otaStart() {
