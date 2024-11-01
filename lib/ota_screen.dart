@@ -1,7 +1,6 @@
 // ota_screen.dart
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'global.dart';
 import 'widgets/background.dart';
 import 'widgets/status_indicators.dart';
 

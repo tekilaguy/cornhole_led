@@ -5,8 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:logger/logger.dart';
 import 'global.dart';
-import 'info_screen.dart';
-import 'setup_screen.dart';
+
 import 'widgets/background.dart';
 import 'widgets/section.dart';
 import 'widgets/status_indicators.dart';
@@ -159,7 +158,7 @@ class HomeScreenState extends State<HomeScreen> {
     FlutterBlue.instance.scanResults.listen((results) {
       for (ScanResult r in results) {
         String deviceName = r.device.name;
-        if (deviceName != null && deviceName.isNotEmpty) {
+        if (deviceName.isNotEmpty) {
           logger.i("Found device: $deviceName");
           if (deviceName == "CornholeBT" && !isConnected) {
             logger.i("Attempting to connect to CornholeBT...");
@@ -664,7 +663,7 @@ class HomeScreenState extends State<HomeScreen> {
             min: 0,
             max: 100,
             value: brightness.toDouble(),
-            divisions: ((100 - 5) / 5).toInt(),
+            divisions: (100 - 5) ~/ 5,
             onChanged: (value) {
               setState(() {
                 brightness = value.toInt();

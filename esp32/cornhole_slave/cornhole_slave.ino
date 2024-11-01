@@ -11,7 +11,7 @@
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
 #define NUM_LEDS_RING   60
-#define NUM_LEDS_BOARD  214
+#define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
 #define COLOR_ORDER     GRB
 #define VOLTS           5
@@ -124,6 +124,7 @@ void breathing();
 void celebrationEffect();
 float readBatteryVoltage();
 int readBatteryLevel();
+void sendData(const String& device, const String& type, const String& data);
 void sendEffectToPeer(const String& effect);
 void sendColorToPeer(int r, int g, int b);
 void sendbrightnessToPeer(int brightness);
@@ -356,6 +357,21 @@ void updateconnectioninfo(){
  }
  
 
+void sendData(const String& device, const String& type, const String& data) {
+  char message[512];
+
+  if (device == "espNow" || device == "both") {
+    snprintf(message, sizeof(message), "%s:%s", type.c_str(), data.c_str());
+    esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
+    Serial.println("Sending to peer: " + String(message));
+  }
+  
+  // if (device == "app" || device == "both") {
+  //   String message = type + ":" + data + "#";
+  //   updateBluetoothData(message);
+  //   Serial.println("Sending to app: " + message);
+  // }
+}
 
 void sendEffectToPeer(const String& effect) {
   char message[32];
@@ -396,7 +412,8 @@ void singleClick() {
   colorIndex = (colorIndex + 1) % (sizeof(colors) / sizeof(colors[0]));
   currentColor = colors[colorIndex];
   setColor(currentColor);
-  sendColorToPeer(currentColor.r, currentColor.g, currentColor.b);
+  //sendColorToPeer(currentColor.r, currentColor.g, currentColor.b);
+  sendData("espNow","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
 }
 
 void doubleClick() {
@@ -406,12 +423,12 @@ void doubleClick() {
   }
   effectIndex = (effectIndex + 1) % (sizeof(effects) / sizeof(effects[0]));
   applyEffect(effects[effectIndex]);
-  sendEffectToPeer(effects[effectIndex]);
+  //sendEffectToPeer(effects[effectIndex]);
+  sendData("espNow","Effect",effects[effectIndex]);
 }
 
 void longPressStart() {
-  toggleLights(!lightsOn); // Toggle the light status
-  deviceConnected = false;
+  toggleLights(!lightsOn);
 }
 
 void toggleLights(bool status) {
@@ -422,7 +439,7 @@ void toggleLights(bool status) {
   Serial.print("Lights are: ");
   Serial.println(message);
   
-  sendData("both","toggleLights",message);
+  sendData("espNow","toggleLights",message);
 }
 
 void otaStart() {

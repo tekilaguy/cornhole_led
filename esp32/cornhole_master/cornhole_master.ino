@@ -696,18 +696,30 @@ void updateBluetoothData(String data) {
 void processEspNowData(String receivedData) {
   int r, g, b, brightness;
 
-  if (receivedData.startsWith("Effect:")) {
+   if (receivedData.startsWith("Color:")) {
+        String colorData = receivedData.substring(6); 
+        
+        if (sscanf(colorData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
+            currentColor = CRGB(r, g, b);
+            setColor(currentColor);
+            sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+            Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
+        } else {
+            Serial.println("Failed to parse color data.");
+        }
+
+  } else if (receivedData.startsWith("Effect:")) {
     String effect = receivedData.substring(7);
     Serial.println("ESP-NOW effect: " + effect);
     effectIndex = getEffectIndex(effect);
     applyEffect(effect);
     sendData("app", "Effect", effects[effectIndex]);
 
-  } else if (sscanf(receivedData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
-    currentColor = CRGB(r, g, b);
-    setColor(currentColor);
-    sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-    Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
+  // } else if (sscanf(receivedData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
+  //   currentColor = CRGB(r, g, b);
+  //   setColor(currentColor);
+  //   sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+  //   Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
 
   } else if (receivedData.startsWith("brightness:") && sscanf(receivedData.c_str(), "brightness:%d", &brightness) == 1) {
     FastLED.setBrightness(brightness);
@@ -720,8 +732,15 @@ void processEspNowData(String receivedData) {
     // sendBoard1Info();
     // sendBoard2Info(receivedData);
 
+  } else if (receivedData.startsWith("toggleLights:")) {
+    String status = receivedData.substring(13);
+    bool lightsStatus = (status == "on");
+    toggleLights(lightsStatus);
+    sendData("app", "toggleLights:", status);
+
   } else {
-    Serial.println("Unknown data received");
+    Serial.print("Unknown data received:");
+    Serial.println(receivedData);
   }
 }
 
@@ -869,8 +888,7 @@ void doubleClick() {
 }
 
 void longPressStart() {
-  toggleLights(!lightsOn); // Toggle the light status
-  deviceConnected = false;
+  toggleLights(!lightsOn);
 }
 
 void toggleLights(bool status) {

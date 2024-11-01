@@ -1,4 +1,6 @@
 // setup_screen.dart
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -525,7 +527,7 @@ class SetupScreenState extends State<SetupScreen> {
           value: value,
           min: 0,
           max: 150,
-          divisions: ((100 - 5) / 5).toInt(),
+          divisions: (100 - 5) ~/ 5,
           label: value.round().toString(),
           onChanged: onChanged,
         ),
