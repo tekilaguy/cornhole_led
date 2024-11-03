@@ -10,7 +10,7 @@
 // LED Setup
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
-#define NUM_LEDS_RING   60
+#define NUM_LEDS_RING   120
 #define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
 #define COLOR_ORDER     GRB
@@ -105,6 +105,7 @@ void sendBoard2Info(struct_message board2);
 void singleClick();
 void doubleClick();
 void longPressStart();
+void longPressStop();
 void toggleLights(bool status);
 void toggleWiFi(bool status);
 void toggleEspNow(bool status);
@@ -200,6 +201,7 @@ if (tpInit == false) {
   button.attachClick(singleClick);
   button.attachDoubleClick(doubleClick);
   button.attachLongPressStart(longPressStart);
+  button.attachLongPressStop(longPressStop);
   updateconnectioninfo();
   powerOnEffect();
   Serial.println("Setup completed.");
@@ -428,9 +430,13 @@ void doubleClick() {
 }
 
 void longPressStart() {
-  toggleLights(!lightsOn);
+    toggleLights(!lightsOn);
 }
 
+void longPressStop() {
+    // Log stop for debugging, if needed
+    Serial.println("Long Press Released");
+}
 void toggleLights(bool status) {
   lightsOn = status;
   setColor(lightsOn ? currentColor : CRGB::Black); // Set color if on, black if off

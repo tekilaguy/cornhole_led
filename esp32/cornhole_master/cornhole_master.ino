@@ -14,7 +14,7 @@
 #include <HTTPUpdate.h>
 
 // LED Setup
-#define NUM_LEDS_RING   60
+#define NUM_LEDS_RING   120
 #define NUM_LEDS_BOARD  216
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
@@ -148,6 +148,7 @@ void startOtaUpdate(String firmwareUrl);
 void singleClick();
 void doubleClick();
 void longPressStart();
+void longPressStop();
 void toggleLights(bool status);
 void toggleWiFi(bool status);
 void toggleEspNow(bool status);
@@ -267,6 +268,7 @@ void setup() {
   button.attachClick(singleClick);
   button.attachDoubleClick(doubleClick);
   button.attachLongPressStart(longPressStart);
+  button.attachLongPressStop(longPressStop);
   powerOnEffect();
 
   strcpy(board2.device, "Board 2");
@@ -888,7 +890,12 @@ void doubleClick() {
 }
 
 void longPressStart() {
-  toggleLights(!lightsOn);
+    toggleLights(!lightsOn);
+}
+
+void longPressStop() {
+    // Log stop for debugging, if needed
+    Serial.println("Long Press Released");
 }
 
 void toggleLights(bool status) {
