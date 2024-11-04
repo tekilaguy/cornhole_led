@@ -6,10 +6,10 @@ class Section extends StatelessWidget {
   final Widget content;
 
   const Section({
-    Key? key,
+    super.key,
     required this.title,
     required this.content,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

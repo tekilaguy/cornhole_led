@@ -4,8 +4,8 @@ import '../global.dart';
 
 class StatusIndicators extends StatelessWidget {
   const StatusIndicators({
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
