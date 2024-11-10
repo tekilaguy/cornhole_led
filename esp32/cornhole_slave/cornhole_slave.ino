@@ -8,10 +8,10 @@
 #include <Preferences.h>
 
 // LED Setup
+#define NUM_LEDS_RING   60
+#define NUM_LEDS_BOARD  216
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
-#define NUM_LEDS_RING   120
-#define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
 #define COLOR_ORDER     GRB
 #define VOLTS           5
@@ -27,7 +27,6 @@ String password = "Funforall";
 // LED Setup
 String board2Name = "Board 2";
 int brightness = 25;
-
 int blockSize = 15;
 unsigned long effectSpeed = 25; // Replace effectSpeed
 int inactivityTimeout = 30;    // Variable for inactivity timeout
@@ -72,6 +71,7 @@ int effectIndex = 0;
 bool lightsOn = true;
 unsigned long previousMillis = 0;
 int chasePosition = 0;
+String currentEffect = "Solid";
 
 // Button Setup
 OneButton button(BUTTON_PIN, true);
@@ -94,6 +94,7 @@ typedef struct struct_message {
 // Create a struct_message called board2
 struct_message board2;
 
+// Function declarations
 void setupWiFi();
 void setupEspNow();
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len);
