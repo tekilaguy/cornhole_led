@@ -4,20 +4,24 @@
 #include <OneButton.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
-#include <BLEDevice.h>
+#include <Preferences.h>
 
+#include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <Preferences.h>
 #include <ArduinoOTA.h>
 #include <HTTPUpdate.h>
 
+#include <ESPAsyncWebServer.h>
+
+AsyncWebServer server(80); // Create a server on port 80
+
 // LED Setup
-#define NUM_LEDS_RING   60
-#define NUM_LEDS_BOARD  216
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
+#define NUM_LEDS_RING   60
+#define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
 #define COLOR_ORDER     GRB
 #define VOLTS           5
@@ -39,9 +43,9 @@ String password = "Funforall";
 String board1Name = "Board 1";
 String board2Name = "Board 2";
 int brightness = 25;
-unsigned long blockSize = 15;
-unsigned long effectSpeed = 25; // Replace effectSpeed
-int inactivityTimeout = 30;    // Variable for inactivity timeout
+unsigned long blockSize = 10;
+unsigned long effectSpeed = 25;
+int inactivityTimeout = 30;
 unsigned long irTriggerDuration = 4000;
 CRGB initialColor = CRGB::Blue;
 CRGB sportsEffectColor1 = CRGB(12,35,64);
@@ -97,9 +101,9 @@ BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
-String rxValue;
 uint32_t previousMillisBT = 0;
 const uint32_t intervalBT = 10000; // 10 seconds
+String rxValueStdStr;
 
 bool espNowEnabled = true; // ESP-NOW synchronization is enabled by default
 bool wifiConnected = false;
@@ -110,6 +114,8 @@ bool wifiEnabled = true; // Variable to toggle WiFi on and off
 String espNowDataBuffer = "";
 bool espNowDataReceived = false;
 bool board2DataReceived = false; // Add this at the top with your global variables
+volatile bool bleDataReceived = false;
+String bleCommandBuffer = "";
 
 // Structure to receive data
 #pragma pack(1)
@@ -136,6 +142,7 @@ void setupWiFi();
 void setupEspNow();
 void setupBT();
 void setupOta();
+void setupWebServer();
 void handleBluetoothData(String data);
 void updateBluetoothData(String data);
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len);
@@ -189,11 +196,14 @@ class MyServerCallbacks: public BLEServerCallbacks {
 // Callback class for handling incoming BLE data
 class MyCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    rxValue = pCharacteristic->getValue();
+    rxValueStdStr = pCharacteristic->getValue();
 
-    if (rxValue.length() > 0) {
-      handleBluetoothData(rxValue);
-      rxValue = ""; // Clear the value after processing
+    if (rxValueStdStr.length() > 0) {
+      // Protect shared variables with a critical section
+      noInterrupts(); // Disable interrupts
+      bleCommandBuffer += String(rxValueStdStr.c_str());
+      bleDataReceived = true;
+      interrupts(); // Re-enable interrupts
     }
   }
 };
@@ -255,6 +265,7 @@ void setup() {
   setupEspNow();
   setupBT();
   setupOta();
+  setupWebServer();
 
   FastLED.addLeds<LED_TYPE, RING_LED_PIN, COLOR_ORDER>(ringLeds, NUM_LEDS_RING).setCorrection(TypicalLEDStrip);
   FastLED.addLeds<LED_TYPE, BOARD_LED_PIN, COLOR_ORDER>(boardLeds, NUM_LEDS_BOARD).setCorrection(TypicalLEDStrip);
@@ -284,16 +295,23 @@ void loop() {
   button.tick();
   handleIRSensor();
   
+  // Process BLE data if new data has been received
   if (!deviceConnected && currentMillis - previousMillisBT >= intervalBT) {
     previousMillisBT = currentMillis;
     btPairing();
   } else {
-    if (rxValue.length() > 0) {
-      handleBluetoothData(rxValue);
-      rxValue = ""; // Clear the value after processing
+    if (bleDataReceived) {
+      // Copy the command buffer to a local variable safely
+      noInterrupts();
+      String dataToProcess = bleCommandBuffer;
+      bleCommandBuffer = "";
+      bleDataReceived = false;
+      interrupts();
+
+      // Now process the command outside of the critical section
+      handleBluetoothData(dataToProcess);
     }
-  }
-  
+  }  
   // Process ESP-NOW data
   if (espNowDataReceived) {
     espNowDataReceived = false; // Reset the flag
@@ -344,6 +362,75 @@ void setupWiFi() {
   Serial.println(WiFi.localIP());
 }
 
+void setupWebServer() {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        String html = "<html><body><h1>Cornhole Admin Panel</h1>";
+        html += "<form action='/setColor' method='GET'>";
+        html += "Color (RGB): <input type='text' name='r' placeholder='Red'> ";
+        html += "<input type='text' name='g' placeholder='Green'> ";
+        html += "<input type='text' name='b' placeholder='Blue'><br>";
+        html += "<button type='submit'>Set Color</button></form><br>";
+
+        html += "<form action='/setEffect' method='GET'>";
+        html += "Effect: <select name='effect'>";
+        for (int i = 0; i < (sizeof(effects) / sizeof(effects[0])); i++) {
+            html += "<option value='" + String(i) + "'>" + effects[i] + "</option>";
+        }
+        html += "</select><br>";
+        html += "<button type='submit'>Set Effect</button></form><br>";
+
+        html += "<form action='/setBrightness' method='GET'>";
+        html += "Brightness (0-255): <input type='text' name='brightness'><br>";
+        html += "<button type='submit'>Set Brightness</button></form><br>";
+
+        html += "</body></html>";
+        request->send(200, "text/html", html);
+    });
+
+    server.on("/setColor", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (request->hasParam("r") && request->hasParam("g") && request->hasParam("b")) {
+            int r = request->getParam("r")->value().toInt();
+            int g = request->getParam("g")->value().toInt();
+            int b = request->getParam("b")->value().toInt();
+            currentColor = CRGB(r, g, b);
+            setColor(currentColor);
+            request->send(200, "text/plain", "Color updated to: R=" + String(r) + " G=" + String(g) + " B=" + String(b));
+        } else {
+            request->send(400, "text/plain", "Missing parameters");
+        }
+    });
+
+    server.on("/setEffect", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (request->hasParam("effect")) {
+            int effectIdx = request->getParam("effect")->value().toInt();
+            if (effectIdx >= 0 && effectIdx < (sizeof(effects) / sizeof(effects[0]))) {
+                effectIndex = effectIdx;
+                applyEffect(effects[effectIdx]);
+                request->send(200, "text/plain", "Effect updated to: " + effects[effectIdx]);
+            } else {
+                request->send(400, "text/plain", "Invalid effect index");
+            }
+        } else {
+            request->send(400, "text/plain", "Missing effect parameter");
+        }
+    });
+
+    server.on("/setBrightness", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (request->hasParam("brightness")) {
+            int brightnessValue = request->getParam("brightness")->value().toInt();
+            brightness = constrain(brightnessValue, 0, 255);
+            FastLED.setBrightness(brightness);
+            FastLED.show();
+            request->send(200, "text/plain", "Brightness updated to: " + String(brightness));
+        } else {
+            request->send(400, "text/plain", "Missing brightness parameter");
+        }
+    });
+
+    server.begin();
+    Serial.println("HTTP Server started");
+}
+
 void setupEspNow() {
   if (esp_now_init() != ESP_OK) {
     return;
@@ -371,6 +458,14 @@ void setupEspNow() {
 }
 
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
+  char msg[50];
+  snprintf(msg, sizeof(msg), "Data received from: %02x:%02x:%02x:%02x:%02x:%02x", info->src_addr[0], info->src_addr[1], info->src_addr[2], info->src_addr[3], info->src_addr[4], info->src_addr[5]);
+  Serial.println(msg);
+  
+  String receivedData = String((char*)incomingData).substring(0, len);
+  Serial.println("Received ESP-Now data: " + receivedData);
+
+
   if (len == sizeof(struct_message)) {
     // Received data is a struct_message
     memcpy(&board2, incomingData, sizeof(board2));
@@ -383,7 +478,7 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
 }
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print(" Status: ");
+  Serial.print(" Status of sent: ");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 
   if (status != ESP_NOW_SEND_SUCCESS) {
@@ -439,6 +534,7 @@ void setupBT() {
 
   // Start the service
   pService->start();
+  pServer->startAdvertising();
 
   // Start advertising after setting up services and characteristics
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -766,15 +862,15 @@ void sendSettings() {
 }
 
 void sendData(const String& device, const String& type, const String& data) {
-  char message[512];
+  char message[250];
 
-  if (device == "espNow" || device == "both") {
+  if (device == "espNow") {
     snprintf(message, sizeof(message), "%s:%s", type.c_str(), data.c_str());
     esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
     Serial.println("Sending to peer: " + String(message));
   }
   
-  if (device == "app" || device == "both") {
+  if (device == "app") {
     String message = type + ":" + data + "#";
     updateBluetoothData(message);
     Serial.println("Sending to app: " + message);
@@ -876,7 +972,8 @@ void singleClick() {
   colorIndex = (colorIndex + 1) % (sizeof(colors) / sizeof(colors[0]));
   currentColor = colors[colorIndex];
   setColor(currentColor);
-  sendData("both","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+  sendData("espNow","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+  sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
 }
 
 void doubleClick() {
@@ -886,11 +983,16 @@ void doubleClick() {
   }
   effectIndex = (effectIndex + 1) % (sizeof(effects) / sizeof(effects[0]));
   applyEffect(effects[effectIndex]);
-  sendData("both","Effect",effects[effectIndex]);
+  sendData("espNow","Effect",effects[effectIndex]);
+  sendData("app","Effect",effects[effectIndex]);
 }
 
 void longPressStart() {
-    toggleLights(!lightsOn);
+  toggleLights(!lightsOn);
+ 
+  String message = String(lightsOn ? "on" : "off");
+  sendData("espNow","toggleLights",message);
+  sendData("app","toggleLights",message);
 }
 
 void longPressStop() {
@@ -906,7 +1008,6 @@ void toggleLights(bool status) {
   Serial.print("Lights are: ");
   Serial.println(message);
   
-  sendData("both","toggleLights",message);
 }
 
 void toggleWiFi(bool status) {

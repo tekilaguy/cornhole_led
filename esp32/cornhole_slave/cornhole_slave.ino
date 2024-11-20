@@ -1,21 +1,25 @@
 //conrnhole_slave.ino
 #include <WiFi.h>
 #include <FastLED.h>
-
 #include <OneButton.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <Preferences.h>
 
 // LED Setup
-#define NUM_LEDS_RING   60
-#define NUM_LEDS_BOARD  216
 #define RING_LED_PIN    32
 #define BOARD_LED_PIN   33
+#define NUM_LEDS_RING   60
+#define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
 #define COLOR_ORDER     GRB
 #define VOLTS           5
 #define MAX_AMPS        2500
+
+// Button and Sensor Pins
+#define BUTTON_PIN 14
+#define SENSOR_PIN 12
+#define BATTERY_PIN 35
 
 //  Configurable Varibales
 Preferences preferences;
@@ -25,24 +29,23 @@ String ssid = "CornholeAP";
 String password = "Funforall";
 
 // LED Setup
+String board1Name = "Board 1";
 String board2Name = "Board 2";
 int brightness = 25;
-int blockSize = 15;
-unsigned long effectSpeed = 25; // Replace effectSpeed
-int inactivityTimeout = 30;    // Variable for inactivity timeout
+unsigned long blockSize = 10;
+unsigned long effectSpeed = 25;
+int inactivityTimeout = 30;
 unsigned long irTriggerDuration = 4000;
 CRGB initialColor = CRGB::Blue;
 CRGB sportsEffectColor1 = CRGB(12,35,64);
 CRGB sportsEffectColor2 = CRGB(241,90,34);
 
-// Button and Sensor Pins
-#define BUTTON_PIN 14
-#define SENSOR_PIN 12
-#define BATTERY_PIN 35
+unsigned long lastActivityTime = 0;
 
 // MAC Addresses for ESP-NOW
 uint8_t masterMAC[] = {0x24, 0x6F, 0x28, 0x88, 0xB4, 0xC8}; // MAC address of the master board
 uint8_t slaveMAC[] = {0x24, 0x6F, 0x28, 0x88, 0xB4, 0xC9};  // MAC address of the slave board
+String ipAddress;
 
 #define ADC_MAX 4095
 #define V_REF 3.3
@@ -79,6 +82,10 @@ OneButton button(BUTTON_PIN, true);
 // IR Trigger variables
 bool irTriggered = false;
 
+// Add these declarations
+String espNowDataBuffer = "";
+bool espNowDataReceived = false;
+
 // Structure to send data
 #pragma pack(1)
 typedef struct struct_message {
@@ -94,7 +101,6 @@ typedef struct struct_message {
 // Create a struct_message called board2
 struct_message board2;
 
-// Function declarations
 void setupWiFi();
 void setupEspNow();
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len);
@@ -127,9 +133,9 @@ void celebrationEffect();
 float readBatteryVoltage();
 int readBatteryLevel();
 void sendData(const String& device, const String& type, const String& data);
-void sendEffectToPeer(const String& effect);
-void sendColorToPeer(int r, int g, int b);
-void sendbrightnessToPeer(int brightness);
+// void sendEffectToPeer(const String& effect);
+// void sendColorToPeer(int r, int g, int b);
+// void sendbrightnessToPeer(int brightness);
 
 void setup() {
   Serial.begin(115200);
@@ -211,6 +217,12 @@ if (tpInit == false) {
  void loop() {
   button.tick();
   handleIRSensor();
+
+  if (espNowDataReceived) {
+    espNowDataReceived = false; // Reset the flag
+    processEspNowData(espNowDataBuffer); // Process the received String data
+  }
+
   if (lightsOn) {
     applyEffect(effects[effectIndex]);
   }
@@ -228,7 +240,7 @@ if (tpInit == false) {
     Serial.println("Connected to WiFi");
     Serial.println("IP Address: ");
     Serial.println(WiFi.localIP());
-      Serial.print("Soft SSID: ");
+      Serial.print("SSID: ");
       Serial.println(ssid);
 }
 
@@ -264,8 +276,20 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   Serial.println(msg);
   
   String receivedData = String((char*)incomingData).substring(0, len);
-  Serial.println("Received data: " + receivedData);
+  Serial.println("Received  ESP-Now data: " + receivedData);
 
+  if (len == sizeof(struct_message)) {
+    // Received data is a struct_message
+    memcpy(&board2, incomingData, sizeof(board2));
+    //board2DataReceived = true; // Set the flag
+  } else {
+    // Received data is a String message
+    espNowDataBuffer = String((char*)incomingData).substring(0, len);
+    espNowDataReceived = true; // Set the flag
+  }
+}
+  
+void processEspNowData(String receivedData) {
   int r, g, b, brightness;
 
    if (receivedData.startsWith("Color:")) {
@@ -363,43 +387,43 @@ void updateconnectioninfo(){
 void sendData(const String& device, const String& type, const String& data) {
   char message[512];
 
-  if (device == "espNow" || device == "both") {
+  if (device == "espNow") {
     snprintf(message, sizeof(message), "%s:%s", type.c_str(), data.c_str());
     esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
     Serial.println("Sending to peer: " + String(message));
   }
   
-  // if (device == "app" || device == "both") {
+  // if (device == "app") {
   //   String message = type + ":" + data + "#";
   //   updateBluetoothData(message);
   //   Serial.println("Sending to app: " + message);
   // }
 }
 
-void sendEffectToPeer(const String& effect) {
-  char message[32];
-  snprintf(message, sizeof(message), "Effect:%s", effect.c_str());
-  esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
-  //updateconnectioninfo();
-}
+// void sendEffectToPeer(const String& effect) {
+//   char message[32];
+//   snprintf(message, sizeof(message), "Effect:%s", effect.c_str());
+//   esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
+//   //updateconnectioninfo();
+// }
 
-void sendColorToPeer(int r, int g, int b) {
-  char message[16];
-  snprintf(message, sizeof(message), "%d,%d,%d", r, g, b);
-  esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
-  //updateconnectioninfo();
-}
+// void sendColorToPeer(int r, int g, int b) {
+//   char message[16];
+//   snprintf(message, sizeof(message), "%d,%d,%d", r, g, b);
+//   esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
+//   //updateconnectioninfo();
+// }
 
-void sendBrightnessToPeer(int brightness) {
-  if (!lightsOn) {
-    Serial.println("Lights are off, skipping color application.");
-    return;
-  }
-  char message[16];
-  snprintf(message, sizeof(message), "brightness:%d", brightness);
-  esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
-  //updateconnectioninfo();
-}
+// void sendBrightnessToPeer(int brightness) {
+//   if (!lightsOn) {
+//     Serial.println("Lights are off, skipping color application.");
+//     return;
+//   }
+//   char message[16];
+//   snprintf(message, sizeof(message), "brightness:%d", brightness);
+//   esp_now_send(masterMAC, (uint8_t *)message, strlen(message));
+//   //updateconnectioninfo();
+// }
 
 void restartCommand() {
    delay(100);
@@ -431,13 +455,16 @@ void doubleClick() {
 }
 
 void longPressStart() {
-    toggleLights(!lightsOn);
+  toggleLights(!lightsOn);
+  String message = String(lightsOn ? "on" : "off");
+  sendData("espNow","toggleLights",message);
 }
 
 void longPressStop() {
     // Log stop for debugging, if needed
     Serial.println("Long Press Released");
 }
+
 void toggleLights(bool status) {
   lightsOn = status;
   setColor(lightsOn ? currentColor : CRGB::Black); // Set color if on, black if off
@@ -446,7 +473,6 @@ void toggleLights(bool status) {
   Serial.print("Lights are: ");
   Serial.println(message);
   
-  sendData("espNow","toggleLights",message);
 }
 
 void otaStart() {
@@ -587,7 +613,7 @@ void applyEffect(String effect) {
   if (!lightsOn) {
     Serial.println("Lights are off, skipping effect application.");
         setColor(CRGB::Black); // Ensure all LEDs are off
-    return;
+   return;
   }
   if (effect == "Solid") {
     setColor(currentColor);
@@ -614,10 +640,22 @@ void applyEffect(String effect) {
   }
 }
 
+int getEffectIndex(String effect) {
+  for (int i = 0; i < (sizeof(effects) / sizeof(effects[0])); i++) {
+    if (effects[i] == effect) {
+      return i;
+    }
+  }
+  return 0;
+}
+
 void setColor(CRGB color) {
-  fill_solid(ringLeds, NUM_LEDS_RING, color);
-  fill_solid(boardLeds, NUM_LEDS_BOARD, color);
-  FastLED.show();
+    if (!lightsOn) {
+        color = CRGB::Black; // Ensure color is black if lights are off
+    }
+    fill_solid(ringLeds, NUM_LEDS_RING, color);
+    fill_solid(boardLeds, NUM_LEDS_BOARD, color);
+    FastLED.show();
 }
 
 void powerOnEffect() {
@@ -631,12 +669,12 @@ void powerOnEffect() {
     FastLED.show();
     delay(5);
   }
-  setColor(currentColor);
+  setColor(initialColor);
 }
 
 void solidChase(CRGB color) {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     float ringPosition = (float)chasePosition * NUM_LEDS_RING / NUM_LEDS_BOARD;
@@ -667,7 +705,7 @@ void bounceEffect(CRGB color) {
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
 
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     iPos += iDirection;
@@ -729,7 +767,7 @@ void gradientChaseEffect(CRGB color) {
 
 void rainbowChase() {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     float ringPosition = (float)chasePosition * NUM_LEDS_RING / NUM_LEDS_BOARD;
@@ -752,7 +790,7 @@ void rainbowChase() {
 
 void redWhiteBlueChase() {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     CRGB colors[] = {CRGB::Red, CRGB::White, CRGB::Blue};
@@ -775,7 +813,7 @@ void redWhiteBlueChase() {
 
 void sportsChase() {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     CRGB colors[] = {sportsEffectColor2, sportsEffectColor1};
@@ -802,7 +840,7 @@ void colorWipe(CRGB color) {
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
 
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     if (isTurningOn) {
@@ -837,7 +875,7 @@ void colorWipe(CRGB color) {
 void twinkle(CRGB color) {
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
     fill_solid(ringLeds, NUM_LEDS_RING, CRGB::Black);
     fill_solid(boardLeds, NUM_LEDS_BOARD, CRGB::Black);
@@ -855,18 +893,17 @@ void breathing() {
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
 
-  // Check if it's time to change the color
   if (currentMillis - lastColorChangeTime >= colorChangeInterval) {
     lastColorChangeTime = currentMillis;
     startColor = colors[currentColorIndex];
-    currentColorIndex = (currentColorIndex + 1) % (sizeof(colors) / sizeof(colors[0])); // Cycle through the colors
+    currentColorIndex = (currentColorIndex + 1) % (sizeof(colors) / sizeof(colors[0]));
     endColor = colors[currentColorIndex];
-    blendAmount = 0.0; // Reset blend amount for the new color transition
+    blendAmount = 0.0;
   }
 
   CRGB currentColor = blend(startColor, endColor, blendAmount * 255);
 
-  if (currentMillis - previousMillis >= brightness) {
+  if (currentMillis - previousMillis >= effectSpeed) {
     previousMillis = currentMillis;
 
     brightness += delta;

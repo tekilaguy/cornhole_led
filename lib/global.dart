@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'home_screen.dart';
-import 'info_screen.dart';
 import 'setup_screen.dart';
 import 'ota_screen.dart';
 
@@ -77,12 +76,11 @@ Color sportEffectColor2 = Colors.white;
 // Screen state references
 HomeScreenState? homeScreenState;
 SetupScreenState? setupScreenState;
-InfoScreenState? infoScreenState;
 OTAScreenState? otaScreenState;
 
 // Color options
 List<Color> colors = [
-  const Color.fromRGBO(0, 0, 255, 1), // Blue
+  const Color.fromARGB(255, 13, 13, 48), // Blue
   const Color.fromRGBO(0, 255, 0, 1), // Green
   const Color.fromRGBO(255, 0, 0, 1), // Red
   const Color.fromRGBO(255, 255, 255, 1), // White

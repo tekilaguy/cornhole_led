@@ -19,6 +19,7 @@ dependencies:
       url: https://github.com/miguelpruivo/flutter_file_picker.git
   flutter_colorpicker: ^1.1.0
   numberpicker: ^2.1.2
+  provider: ^6.0.0
 
 
 dev_dependencies:
