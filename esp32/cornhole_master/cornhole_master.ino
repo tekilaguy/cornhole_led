@@ -343,7 +343,7 @@ void setupWiFi() {
     if (attempts > 20) {
      Serial.println("");
       Serial.println("Switching to AP mode...");
-      WiFi.mode(WIFI_AP_STA);
+      WiFi.mode(WIFI_STA);
       WiFi.softAP(ssid, password);
       Serial.println("Soft Access Point started");
       Serial.print("Soft IP Address: ");
@@ -364,6 +364,7 @@ void setupWiFi() {
 
 void setupWebServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("Root page accessed");
         String html = "<html><body><h1>Cornhole Admin Panel</h1>";
         html += "<form action='/setColor' method='GET'>";
         html += "Color (RGB): <input type='text' name='r' placeholder='Red'> ";
