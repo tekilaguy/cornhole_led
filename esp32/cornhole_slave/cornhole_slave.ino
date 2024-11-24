@@ -36,9 +36,6 @@ unsigned long blockSize = 10;
 unsigned long effectSpeed = 25;
 int inactivityTimeout = 30;
 unsigned long irTriggerDuration = 4000;
-CRGB initialColor = CRGB::Blue;
-CRGB sportsEffectColor1 = CRGB(12,35,64);
-CRGB sportsEffectColor2 = CRGB(241,90,34);
 
 unsigned long lastActivityTime = 0;
 
@@ -57,6 +54,8 @@ CRGB boardLeds[NUM_LEDS_BOARD];
 
 // Color Definitions
 #define BURNT_ORANGE    CRGB(191, 87, 0)
+#define sportsEffectColor1  CRGB(12,35,64)
+#define sportsEffectColor2  CRGB(241,90,34)
 unsigned long colorChangeInterval = 5000; 
 unsigned long lastColorChangeTime = 0;
 int currentColorIndex = 0;
@@ -67,6 +66,7 @@ CRGB endColor;
 float blendAmount = 0.0;
 float blendStep = 0.01; 
 CRGB currentColor = CRGB::Blue;
+CRGB initialColor = CRGB::Blue;
 
 // Effect Variables
 String effects[] = {"Solid", "Twinkle", "Chase", "Wipe", "Bounce", "Breathing", "Gradient", "Rainbow",  "America", "Sports"};
@@ -227,7 +227,40 @@ if (tpInit == false) {
     applyEffect(effects[effectIndex]);
   }
 
-}void setupWiFi() {
+}
+
+void initializePreferences() {
+    preferences.begin("cornhole", false);
+    if (!preferences.getBool("nvsInit", false)) {
+        preferences.putString("ssid", "CornholeAP");
+        preferences.putString("password", "Funforall");
+        preferences.putString("board1Name", "Board 1");
+        preferences.putString("board2Name", "Board 2");
+
+        preferences.putInt("initialColorR", 0);
+        preferences.putInt("initialColorG", 0);
+        preferences.putInt("initialColorB", 255);
+
+        preferences.putInt("sportsColor1R", 191);
+        preferences.putInt("sportsColor1G", 87);
+        preferences.putInt("sportsColor1B", 0);
+
+        preferences.putInt("sportsColor2R", 255);
+        preferences.putInt("sportsColor2G", 255);
+        preferences.putInt("sportsColor2B", 255);
+
+        preferences.putInt("brightness", 50);
+        preferences.putULong("blockSize", 15);
+        preferences.putULong("effectSpeed", 25);
+        preferences.putInt("inactivityTimeout", 30);
+        preferences.putULong("irTriggerDuration", 4000);
+
+        preferences.putBool("nvsInit", true);
+    }
+    preferences.end();
+}
+
+void setupWiFi() {
     Serial.println("Connecting to WiFi...");
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid,password);
@@ -302,6 +335,17 @@ void processEspNowData(String receivedData) {
         } else {
             Serial.println("Failed to parse color data.");
         }
+    } else if (receivedData.startsWith("ColorIndex:")) {
+        int index = receivedData.substring(11).toInt();
+        if (index >= 0 && index < sizeof(colors) / sizeof(colors[0])) {
+            currentColor = colors[index];
+            setColor(currentColor);
+            Serial.print("Color set to index: ");
+            Serial.println(index);
+        } else {
+            Serial.println("Invalid color index");
+        }
+
     } else if (receivedData.startsWith("Effect:")) {
         // Handle effect data similarly
         String effect = receivedData.substring(7); // Start after "Effect:"
@@ -331,8 +375,13 @@ void processEspNowData(String receivedData) {
   } else if (receivedData == "GET_INFO") {
     updateconnectioninfo();
 
+  } else if (receivedData == "CLEAR_ALL") {
+    delay(10000);
+    preferences.clear(); // Clear all preferences
+    Serial.println("All saved variables cleared.");
+  
   } else {
-    processCommand(receivedData);
+    //processCommand(receivedData);
     Serial.println("Unknown data received");
   }
 }
@@ -497,10 +546,7 @@ void setDefaults(String data) {
 
 void processCommand(String command) {
   preferences.begin("cornhole",false);
-  if (command == "CLEAR_ALL") {
-    preferences.clear(); // Clear all preferences
-    Serial.println("All saved variables cleared.");
-  } else if  (command.startsWith("SSID:")) {
+if  (command.startsWith("SSID:")) {
         ssid = command.substring(5);
         preferences.putString("ssid", ssid);
         Serial.print("SSID set to: ");

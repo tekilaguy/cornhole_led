@@ -47,9 +47,6 @@ unsigned long blockSize = 10;
 unsigned long effectSpeed = 25;
 int inactivityTimeout = 30;
 unsigned long irTriggerDuration = 4000;
-CRGB initialColor = CRGB::Blue;
-CRGB sportsEffectColor1 = CRGB(12,35,64);
-CRGB sportsEffectColor2 = CRGB(241,90,34);
 
 unsigned long lastActivityTime = 0;
     
@@ -68,11 +65,14 @@ CRGB boardLeds[NUM_LEDS_BOARD];
 
 // Color Definitions
 #define BURNT_ORANGE    CRGB(191, 87, 0)
+CRGB initialColor = CRGB::Blue;
+CRGB sportsEffectColor1 = CRGB(12,35,64);
+CRGB sportsEffectColor2 = CRGB(241,90,34);
 unsigned long colorChangeInterval = 5000; // Change color every 5 seconds
 unsigned long lastColorChangeTime = 0;
 int currentColorIndex = 0;
-CRGB colors[] = {CRGB::Blue, CRGB::Green, CRGB::Red, CRGB::White, BURNT_ORANGE, CRGB::Aqua, CRGB::Purple, CRGB::Pink}; // Define your colors
 int colorIndex = 0;
+CRGB colors[] = {CRGB::Blue, CRGB::Green, CRGB::Red, CRGB::White, BURNT_ORANGE, CRGB::Aqua, CRGB::Purple, CRGB::Pink};
 CRGB startColor;
 CRGB endColor;
 float blendAmount = 0.0;
@@ -330,8 +330,40 @@ void loop() {
   ArduinoOTA.handle();
 }
 
+void initializePreferences() {
+    preferences.begin("cornhole", false);
+    if (!preferences.getBool("nvsInit", false)) {
+        preferences.putString("ssid", "CornholeAP");
+        preferences.putString("password", "Funforall");
+        preferences.putString("board1Name", "Board 1");
+        preferences.putString("board2Name", "Board 2");
+
+        preferences.putInt("initialColorR", 0);
+        preferences.putInt("initialColorG", 0);
+        preferences.putInt("initialColorB", 255);
+
+        preferences.putInt("sportsColor1R", 191);
+        preferences.putInt("sportsColor1G", 87);
+        preferences.putInt("sportsColor1B", 0);
+
+        preferences.putInt("sportsColor2R", 255);
+        preferences.putInt("sportsColor2G", 255);
+        preferences.putInt("sportsColor2B", 255);
+
+        preferences.putInt("brightness", 50);
+        preferences.putULong("blockSize", 15);
+        preferences.putULong("effectSpeed", 25);
+        preferences.putInt("inactivityTimeout", 30);
+        preferences.putULong("irTriggerDuration", 4000);
+
+        preferences.putBool("nvsInit", true);
+    }
+    preferences.end();
+}
+
 void setupWiFi() {
   Serial.println("Connecting to WiFi...");
+    delay(500);
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
 
@@ -343,7 +375,7 @@ void setupWiFi() {
     if (attempts > 20) {
      Serial.println("");
       Serial.println("Switching to AP mode...");
-      WiFi.mode(WIFI_STA);
+      WiFi.mode(WIFI_AP_STA);
       WiFi.softAP(ssid, password);
       Serial.println("Soft Access Point started");
       Serial.print("Soft IP Address: ");
@@ -432,30 +464,39 @@ void setupWebServer() {
     Serial.println("HTTP Server started");
 }
 
+void sendEspNowMessage(const String& message) {
+    esp_now_send(slaveMAC, (uint8_t*) message.c_str(), message.length());
+    Serial.println("ESP-NOW Message Sent: " + message);
+}
+
+bool addEspNowPeer(const uint8_t* peerAddr) {
+    esp_now_peer_info_t peerInfo;
+    memset(&peerInfo, 0, sizeof(peerInfo));
+    memcpy(peerInfo.peer_addr, peerAddr, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+
+    if (!esp_now_is_peer_exist(peerAddr)) {
+        if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+            Serial.println("Failed to add peer");
+            return false;
+        }
+        Serial.println("Peer added successfully");
+    }
+    return true;
+}
+
 void setupEspNow() {
-  if (esp_now_init() != ESP_OK) {
-    return;
-  }
-  esp_now_register_recv_cb(onDataRecv);
-  esp_now_register_send_cb(onDataSent);
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("ESP-NOW Init Failed");
+        return;
+    }
+    esp_now_register_recv_cb(onDataRecv);
+    esp_now_register_send_cb(onDataSent);
 
-  esp_now_peer_info_t peerInfo;
-  memset(&peerInfo, 0, sizeof(peerInfo));
-  memcpy(peerInfo.peer_addr, slaveMAC, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-  peerInfo.ifidx = WIFI_IF_STA;
-
-  if (esp_now_is_peer_exist(slaveMAC)) {
-    esp_now_del_peer(slaveMAC);
-  }
-
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-  } else {
-    sendData("espNow","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-    sendData("espNow","Effect",effects[effectIndex]);
-    Serial.println("Peer added successfully");
-  }
+    if (addEspNowPeer(slaveMAC)) {
+        sendEspNowMessage("Initialization Complete");
+    }
 }
 
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
@@ -634,6 +675,7 @@ void processCommand(String command) {
     preferences.putInt("initialColorG", g);
     preferences.putInt("initialColorB", b);
     Serial.printf("Initial color set to R:%d, G:%d, B:%d\n", r, g, b);
+    sendData("espNow", "INITIALCOLOR", String(initialColor.r) + "," + String(initialColor.g) + "," + String(initialColor.b));
 
   } else if (command.startsWith("SPORTCOLOR1:")) {
     int r, g, b;
@@ -643,6 +685,7 @@ void processCommand(String command) {
     preferences.putInt("sportsColor1G", g);
     preferences.putInt("sportsColor1B", b);
     Serial.printf("Sport Color 1 set to R:%d, G:%d, B:%d\n", r, g, b);
+    sendData("espNow", "SPORTCOLOR1", String(sportsEffectColor1.r) + "," + String(sportsEffectColor1.g) + "," + String(sportsEffectColor1.b));
 
   } else if (command.startsWith("SPORTCOLOR2:")) {
     int r, g, b;
@@ -652,6 +695,7 @@ void processCommand(String command) {
     preferences.putInt("sportsColor2G", g);
     preferences.putInt("sportsColor2B", b);
     Serial.printf("Sport Color 2 set to R:%d, G:%d, B:%d\n", r, g, b);
+    sendData("espNow", "SPORTCOLOR2", String(sportsEffectColor2.r) + "," + String(sportsEffectColor2.g) + "," + String(sportsEffectColor2.b));
 
   } else if  (command.startsWith("B1:")) {
         board1Name = command.substring(3);
@@ -680,6 +724,7 @@ void processCommand(String command) {
         preferences.putULong("blockSize", blockSize);
         Serial.print("Effect size set to: ");
         Serial.println(blockSize);
+        sendData("espNow","SIZE",String(blockSize));
 
     } else if (command.startsWith("SPEED:")) {
         sscanf(command.c_str(), "SPEED:%lu", &effectSpeed);
@@ -688,18 +733,19 @@ void processCommand(String command) {
         Serial.println(effectSpeed);
         sendData("espNow","SPEED",String(effectSpeed));
 
-
     } else if (command.startsWith("CELEB:")) {
         sscanf(command.c_str(), "CELEB:%lu", &irTriggerDuration);
         preferences.putULong("irTriggerDuration", irTriggerDuration);
         Serial.print("Celebration duration set to: ");
         Serial.println(irTriggerDuration);
+        sendData("espNow","CELEB",String(irTriggerDuration));
 
     } else if (command.startsWith("TIMEOUT:")) {
         sscanf(command.c_str(), "TIMEOUT:%d", &inactivityTimeout);
         preferences.putInt("inactivityTimeout", inactivityTimeout);
         Serial.print("Inactivity timeout set to: ");
         Serial.println(inactivityTimeout);
+        sendData("espNow","TIMEOUT",String(inactivityTimeout));
 
     } else if (command.startsWith("Effect:")) {
         String effect = command.substring(7);
@@ -712,9 +758,9 @@ void processCommand(String command) {
         sscanf(command.c_str(), "colorIndex:%d", &index);
         if (index >= 0 && index < sizeof(colors) / sizeof(colors[0])) {
             currentColor = colors[index];
-            setColor(currentColor);
-            sendData("espNow","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
             colorIndex = index; // Update the color index
+            setColor(currentColor);
+            sendData("espNow","ColorIndex", String(colorIndex));
             Serial.print("Color set to index: ");
             Serial.println(index);
         } else {
@@ -731,11 +777,13 @@ void processCommand(String command) {
         String status = command.substring(11);
         bool wifiStatus = (status == "on");
         toggleWiFi(wifiStatus);
+        sendData("espNow","toggleWiFi",status);
 
     } else if (command.startsWith("toggleLights")) {
         String status = command.substring(13);
         bool lightsStatus = (status == "on");
         toggleLights(lightsStatus);
+        sendData("espNow","toggleLights",status);
 
     } else if (command.startsWith("toggleEspNow")) {
         String status = command.substring(13);
@@ -747,8 +795,8 @@ void processCommand(String command) {
 
     } else if (command.startsWith("GET_SETTINGS")) {
         sendSettings();
-        sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-        sendData("app","Effect",effects[effectIndex]);
+        //sendData("app", "ColorIndex", String(colorIndex));
+        //sendData("app","Effect",effects[effectIndex]);
 
     } else if (command =="GET_INFO") {
         const char* message = command.c_str();
@@ -768,9 +816,9 @@ void processCommand(String command) {
 
 void updateBluetoothData(String data) {
     // Ensure the message ends with a delimiter
-    if (!data.endsWith("#")) {
-        data += "#"; 
-    }
+    // if (!data.endsWith("#")) {
+    //     data += "#"; 
+    // }
 
     const int maxChunkSize = 20;  // Maximum BLE payload size is 20 bytes
     String message = data;  // Full message to send
@@ -793,20 +841,20 @@ void updateBluetoothData(String data) {
 }
 
 void processEspNowData(String receivedData) {
-  int r, g, b, brightness;
+  int brightness;
 
-   if (receivedData.startsWith("Color:")) {
-        String colorData = receivedData.substring(6); 
-        
-        if (sscanf(colorData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
-            currentColor = CRGB(r, g, b);
-            setColor(currentColor);
-            sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-            Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
-        } else {
-            Serial.println("Failed to parse color data.");
-        }
-
+  if (receivedData.startsWith("ColorIndex:")) {
+    String indexStr = receivedData.substring(11); // Length of "ColorIndex:"
+    int index = indexStr.toInt();
+    if (index >= 0 && index < (sizeof(colors) / sizeof(colors[0]))) {
+      currentColor = colors[index];
+      setColor(currentColor);
+      colorIndex = index;
+      sendData("app", "ColorIndex", String(colorIndex));
+      Serial.println("Received ColorIndex: " + String(index));
+    } else {
+      Serial.println("Invalid ColorIndex received.");
+    }
   } else if (receivedData.startsWith("Effect:")) {
     String effect = receivedData.substring(7);
     Serial.println("ESP-NOW effect: " + effect);
@@ -845,12 +893,12 @@ void processEspNowData(String receivedData) {
 
 void sendSettings() {
     char data[512];
-    sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;INITIALCOLOR:%d,%d,%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%d;SPEED:%d;CELEB:%d;TIMEOUT:%d;",
+    sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%d;SPEED:%d;CELEB:%d;TIMEOUT:%d;",
             ssid.c_str(),
             password.c_str(),
             board1Name.c_str(),
             board2Name.c_str(),
-            initialColor.r, initialColor.g, initialColor.b,
+            colorIndex,
             sportsEffectColor1.r, sportsEffectColor1.g, sportsEffectColor1.b,
             sportsEffectColor2.r, sportsEffectColor2.g, sportsEffectColor2.b,
             brightness,
@@ -872,7 +920,7 @@ void sendData(const String& device, const String& type, const String& data) {
   }
   
   if (device == "app") {
-    String message = type + ":" + data + "#";
+    String message = type + ":" + data +";";
     updateBluetoothData(message);
     Serial.println("Sending to app: " + message);
   }
@@ -912,19 +960,19 @@ void sendRestartCommand() {
 }
 
 void sendBoard1Info() {
-  char data[512];
+  char data[256];
 
-  sprintf(data, "1:n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d;",
+  sprintf(data, "n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d;",
             board1Name,
             masterMAC[0], masterMAC[1], masterMAC[2],
             masterMAC[3], masterMAC[4], masterMAC[5],
-            ipAddress,
+            ipAddress.c_str(),
             readBatteryLevel(),
             (int)readBatteryVoltage());
 
   updateBluetoothData(data);
-    Serial.print("Sending Board 1 to app: ");
-    Serial.println(data);
+  Serial.print("Sending Board 1 to app: ");
+  Serial.println(data);
 }
 
 // Function to send board 2 information via BLE
@@ -932,23 +980,17 @@ void sendBoard1Info() {
 void sendBoard2Info(struct_message board2){
   char data[512];
 
-  sprintf(data, "2:n2:%s;m2:%02x:%02x:%02x:%02x:%02x:%02x;i2:%s;l2:%d;v2:%d;",
+  sprintf(data, "n2:%s;m2:%02x:%02x:%02x:%02x:%02x:%02x;i2:%s;l2:%d;v2:%d;",
           board2.name,
           board2.macAddr[0], board2.macAddr[1], board2.macAddr[2],
           board2.macAddr[3], board2.macAddr[4], board2.macAddr[5],
           board2.ipAddr,
           board2.batteryLevel,
           board2.batteryVoltage);
+
   updateBluetoothData(data);
-    // Serial.printf("Board 2 Info - Name: %s, MAC: %02x:%02x:%02x:%02x:%02x:%02x, IP: %s, Battery Level: %d%%, Voltage: %dV\n", 
-    //               board2.name, 
-    //               board2.macAddr[0], board2.macAddr[1], board2.macAddr[2], 
-    //               board2.macAddr[3], board2.macAddr[4], board2.macAddr[5], 
-    //               board2.ipAddr, 
-    //               board2.batteryLevel, 
-    //               board2.batteryVoltage);
-    Serial.print("Sending Board 2 to app: ");
-    Serial.println(data);
+  Serial.print("Sending Board 2 to app: ");
+  Serial.println(data);
 }
 
 // void startOtaUpdate(String firmwareUrl) {
@@ -973,8 +1015,8 @@ void singleClick() {
   colorIndex = (colorIndex + 1) % (sizeof(colors) / sizeof(colors[0]));
   currentColor = colors[colorIndex];
   setColor(currentColor);
-  sendData("espNow","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-  sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+  sendData("espNow", "ColorIndex", String(colorIndex));
+  sendData("app", "ColorIndex", String(colorIndex));
 }
 
 void doubleClick() {
@@ -1043,11 +1085,12 @@ void btPairing(){
     deviceConnected = false;
   } else {
     deviceConnected = true;
+
+    //currentColor = colors[colorIndex];
+    delay(1000);
+    sendData("app", "ColorIndex", String(colorIndex));
+    sendData("app","Effect",effects[effectIndex]);
     Serial.println("Bluetooth Device paired successfully");
-    // delay(100);
-    // currentColor = colors[colorIndex];
-    // sendData("app","Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-    // sendData("app","Effect",effects[effectIndex]);
       }
 }
 
@@ -1228,26 +1271,23 @@ void gradientChaseEffect(CRGB color) {
 }
 
 void rainbowChase() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= effectSpeed) {
-    previousMillis = currentMillis;
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= effectSpeed) {
+        previousMillis = currentMillis;
 
-    float ringPosition = (float)chasePosition * NUM_LEDS_RING / NUM_LEDS_BOARD;
+        uint8_t hueIncrement = 256 / NUM_LEDS_BOARD;
 
-    for (int i = 0; i < NUM_LEDS_BOARD; i++) {
-      boardLeds[i] = CHSV((i + chasePosition) * 256 / NUM_LEDS_BOARD, 255, 255);
+        for (int i = 0; i < NUM_LEDS_BOARD; i++) {
+            boardLeds[i] = CHSV((i * hueIncrement + chasePosition) & 255, 255, 255);
+        }
+
+        for (int i = 0; i < NUM_LEDS_RING; i++) {
+            ringLeds[i] = CHSV(((i * 256 / NUM_LEDS_RING) + (chasePosition * 256 / NUM_LEDS_BOARD)) & 255, 255, 255);
+        }
+
+        chasePosition = (chasePosition + 1) % NUM_LEDS_BOARD;
+        FastLED.show();
     }
-
-    for (int i = 0; i < NUM_LEDS_RING; i++) {
-      ringLeds[i] = CHSV((int)(i + ringPosition) * 256 / NUM_LEDS_RING, 255, 255);
-    }
-
-    chasePosition++;
-    if (chasePosition >= NUM_LEDS_BOARD) {
-      chasePosition = 0;
-    }
-    FastLED.show();
-  }
 }
 
 void redWhiteBlueChase() {

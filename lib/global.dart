@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'home_screen.dart';
+import 'info_screen.dart';
 import 'setup_screen.dart';
 import 'ota_screen.dart';
 
@@ -70,17 +71,20 @@ String? previouspassword;
 
 // Color settings
 Color initialStartupColor = Colors.blue;
-Color sportEffectColor1 = Colors.deepOrange;
+Color sportEffectColor1 = const Color.fromARGB(255, 181,87,0);
 Color sportEffectColor2 = Colors.white;
+Color sportEffectColor3 = const Color.fromARGB(255, 241,90,34);
+Color sportEffectColor4 = const Color.fromARGB(255, 12,35,64);
 
 // Screen state references
 HomeScreenState? homeScreenState;
 SetupScreenState? setupScreenState;
 OTAScreenState? otaScreenState;
+InfoScreenState? infoScreenState;
 
 // Color options
 List<Color> colors = [
-  const Color.fromARGB(255, 13, 13, 48), // Blue
+  const Color.fromRGBO(0, 0, 255, 1), // Blue
   const Color.fromRGBO(0, 255, 0, 1), // Green
   const Color.fromRGBO(255, 0, 0, 1), // Red
   const Color.fromRGBO(255, 255, 255, 1), // White
