@@ -376,13 +376,13 @@ void processEspNowData(String receivedData) {
     updateconnectioninfo();
 
   } else if (receivedData == "CLEAR_ALL") {
-    delay(10000);
     preferences.clear(); // Clear all preferences
     Serial.println("All saved variables cleared.");
+    delay(3000); 
   
   } else {
-    //processCommand(receivedData);
-    Serial.println("Unknown data received");
+    processCommand(receivedData);
+    //Serial.println("Unknown data received");
   }
 }
 

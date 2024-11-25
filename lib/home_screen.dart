@@ -2,7 +2,7 @@
 import 'dart:async'; // Required for Timer
 import 'dart:convert'; // Required for utf8.encode
 import 'package:flutter/material.dart';
-import 'package:flutter_blue/flutter_blue.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:logger/logger.dart';
 import 'global.dart';
 
@@ -65,8 +65,8 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   void initializeBluetooth() {
-    FlutterBlue.instance.state.listen((state) {
-      if (state == BluetoothState.on) {
+    FlutterBluePlus.adapterState.listen((state) {
+      if (state == BluetoothAdapterState.on) {
         scanForDevices();
       } else {
         logger.w("Bluetooth is not enabled. Please enable Bluetooth.");
@@ -75,17 +75,17 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   void manageBluetoothState(BluetoothDevice device) {
-    device.state.listen((state) {
-      if (state == BluetoothDeviceState.connected) {
-        logger.i("Device connected: ${device.name}");
+    device.connectionState.listen((state) {
+      if (state == BluetoothConnectionState.connected) {
+        logger.i("Device connected: ${device.platformName}");
         setState(() {
           isConnected = true;
           connectedDevice = device;
         });
         discoverServices(device);
         reconnectTimer?.cancel();
-      } else if (state == BluetoothDeviceState.disconnected) {
-        logger.w("Device disconnected: ${device.name}");
+      } else if (state == BluetoothConnectionState.disconnected) {
+        logger.w("Device disconnected: ${device.platformName}");
         setState(() {
           isConnected = false;
           connectedDevice = null;
@@ -96,7 +96,7 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> connectToDevice(BluetoothDevice device) async {
-    logger.i("Connecting to device: ${device.name}");
+    logger.i("Connecting to device: ${device.platformName}");
     try {
       await device.connect(autoConnect: false);
       await device.requestMtu(240);
@@ -109,26 +109,27 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void attemptReconnection(BluetoothDevice device) {
-    if (reconnectTimer?.isActive ?? false) reconnectTimer?.cancel();
+void attemptReconnection(BluetoothDevice device) {
+  if (reconnectTimer?.isActive ?? false) reconnectTimer?.cancel();
 
-    reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      if (timer.tick >= reconnectDuration.inSeconds / 5) {
-        logger.i("Reconnection attempts timed out.");
-        timer.cancel();
-      } else if (!isConnected) {
-        logger.i("Attempting to reconnect...");
-        try {
-          await device.connect();
-          logger.i("Reconnected to device: ${device.name}");
-          manageBluetoothState(device); // Re-register state listener
-          timer.cancel(); // Stop the timer once reconnected
-        } catch (e) {
-          logger.e("Reconnection attempt failed: $e");
-        }
+  reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    if (timer.tick >= reconnectDuration.inSeconds / 5) {
+      logger.i("Reconnection attempts timed out.");
+      timer.cancel();
+    } else if (!isConnected) {
+      logger.i("Attempting to reconnect...");
+      try {
+        await Future.delayed(const Duration(seconds: 2)); // Add a delay
+        await device.connect(autoConnect: false);
+        logger.i("Reconnected to device: ${device.platformName}");
+        manageBluetoothState(device); // Re-register state listener
+        timer.cancel(); // Stop the timer once reconnected
+      } catch (e) {
+        logger.e("Reconnection attempt failed: $e");
       }
-    });
-  }
+    }
+  });
+}
 
   void discoverServices(BluetoothDevice device) async {
     List<BluetoothService> services = await device.discoverServices();
@@ -140,7 +141,7 @@ class HomeScreenState extends State<HomeScreen> {
         if (characteristic.properties.notify) {
           notifyCharacteristic = characteristic;
           notifyCharacteristic?.setNotifyValue(true);
-          notifyCharacteristic?.value.listen((value) {
+          notifyCharacteristic?.lastValueStream.listen((value) {
             onValueReceived(value);
           });
         }
@@ -156,16 +157,16 @@ class HomeScreenState extends State<HomeScreen> {
     }
 
     logger.i("Scanning for devices...");
-    FlutterBlue.instance.startScan(timeout: const Duration(seconds: 4));
-    FlutterBlue.instance.scanResults.listen((results) {
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
+    FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
-        String deviceName = r.device.name;
+        String deviceName = r.device.platformName;
         if (deviceName.isNotEmpty) {
           logger.i("Found device: $deviceName");
           if (deviceName == "CornholeBT" && !isConnected) {
             logger.i("Attempting to connect to CornholeBT...");
             connectToDevice(r.device);
-            FlutterBlue.instance.stopScan();
+            FlutterBluePlus.stopScan();
             return;
           }
           if (!devicesList.contains(r.device)) {
@@ -615,8 +616,8 @@ void navigateToSetupScreen() async {
               ),
               child: ListTile(
                 title: Text(
-                  devicesList[index].name.isNotEmpty
-                      ? devicesList[index].name
+                  devicesList[index].platformName.isNotEmpty
+                      ? devicesList[index].platformName
                       : 'Unknown Device', // Provide a default value
                   style: const TextStyle(
                     fontSize: 18,

@@ -13,6 +13,8 @@ Logger logger = Logger();
 String receivedMessage = "";
 int totalChunks = 0;
 int receivedChunks = 0;
+bool isScanning = false;
+bool isReconnecting = false;
 
 // Connection and device status
 bool isConnected = false;
@@ -81,6 +83,9 @@ HomeScreenState? homeScreenState;
 SetupScreenState? setupScreenState;
 OTAScreenState? otaScreenState;
 InfoScreenState? infoScreenState;
+
+const String getSettingsCommand = "GET_SETTINGS;";
+const String toggleWiFiCommand = "toggleWiFi:";
 
 // Color options
 List<Color> colors = [

@@ -18,11 +18,18 @@
 @import flutter_blue;
 #endif
 
+#if __has_include(<flutter_blue_plus/FlutterBluePlusPlugin.h>)
+#import <flutter_blue_plus/FlutterBluePlusPlugin.h>
+#else
+@import flutter_blue_plus;
+#endif
+
 @implementation GeneratedPluginRegistrant
 
 + (void)registerWithRegistry:(NSObject<FlutterPluginRegistry>*)registry {
   [FilePickerPlugin registerWithRegistrar:[registry registrarForPlugin:@"FilePickerPlugin"]];
   [FlutterBluePlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterBluePlugin"]];
+  [FlutterBluePlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterBluePlusPlugin"]];
 }
 
 @end

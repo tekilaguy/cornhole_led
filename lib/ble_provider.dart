@@ -3,136 +3,185 @@
 // ignore_for_file: unrelated_type_equality_checks
 
 import 'package:flutter/material.dart';
-import 'package:flutter_blue/flutter_blue.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:logger/logger.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'global.dart';
 
 class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
 
+  List<BluetoothDevice> devicesList = [];
+  BluetoothDevice? connectedDevice;
   BluetoothDevice? device;
   BluetoothCharacteristic? writeCharacteristic;
   BluetoothCharacteristic? notifyCharacteristic;
+  StreamSubscription? adapterStateSubscription;
+  StreamSubscription? scanResultsSubscription;
+  StreamSubscription? connectionStateSubscription;
   bool isConnected = false;
   Timer? reconnectTimer;
   static const reconnectDuration = Duration(seconds: 30);
 
-  // State variables
-  bool wifiEnabled = true;
-  bool lightsOn = false;
-  bool espNowEnabled = false;
-  String connectionInfo = '';
-  String receivedMessage = '';
+  // Helper function
+  int getColorIndexFromRGB(int r, int g, int b) {
+    // Implement this function based on your app's logic
+    return 0; // Placeholder
+  }
 
-  // Additional state variables
-  String ssid = '';
-  String password = '';
-  String nameBoard1 = '';
-  String nameBoard2 = '';
-  double initialBrightness = 100.0;
-  double blockSize = 10.0;
-  double effectSpeed = 10.0;
-  double celebrationDuration = 5000.0;
-  double inactivityTimeout = 30.0;
+  BLEProvider() {
+    initializeBluetooth();
+    if (isConnected) {
+      requestCurrentSettings(); // Request the current settings from the board
+    }
+  }
 
-  // Method to connect to the device
+  void initializeBluetooth() {
+    adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
+      if (state == BluetoothAdapterState.on) {
+        scanForDevices();
+      } else {
+        logger.w("Bluetooth is not enabled. Please enable Bluetooth.");
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    reconnectTimer?.cancel();
+    adapterStateSubscription?.cancel();
+    scanResultsSubscription?.cancel();
+    connectionStateSubscription?.cancel();
+    FlutterBluePlus.stopScan();
+    super.dispose();
+  }
+
+  void manageBluetoothState(BluetoothDevice device) {
+    connectionStateSubscription?.cancel();
+    connectionStateSubscription = device.connectionState.listen((state) {
+      if (state == BluetoothConnectionState.connected) {
+        logger.i("Device connected: ${device.platformName}");
+
+        isConnected = true;
+        connectedDevice = device;
+
+        discoverServices(device);
+        reconnectTimer?.cancel();
+        notifyListeners();
+      } else if (state == BluetoothConnectionState.disconnected) {
+        logger.w("Device disconnected: ${device.platformName}");
+        notifyListeners();
+        attemptReconnection(device);
+      }
+    });
+  }
+
   Future<void> connectToDevice(BluetoothDevice device) async {
-    this.device = device;
+    logger.i("Connecting to device: ${device.platformName}");
     try {
-      await device.connect();
-      isConnected = true;
-      notifyListeners();
-      await discoverServices();
+      await device.connect(autoConnect: false);
+      await device.requestMtu(240);
+      manageBluetoothState(device); // Consolidate state management
     } catch (e) {
-      logger.e("Failed to connect: $e");
+      logger.e("Cannot connect, exception occurred: $e");
       isConnected = false;
       notifyListeners();
     }
   }
 
-  // Method to discover services and characteristics
-Future<void> discoverServices() async {
-  if (device == null) return;
-  List<BluetoothService> services = await device!.discoverServices();
-  for (BluetoothService service in services) {
-    logger.i("Found service: ${service.uuid}");
-    for (BluetoothCharacteristic characteristic in service.characteristics) {
-      logger.i("Found characteristic: ${characteristic.uuid}");
-      logger.i("Properties: "
-          "write=${characteristic.properties.write}, "
-          "notify=${characteristic.properties.notify}, "
-          "indicate=${characteristic.properties.indicate}");
-      
-      // Replace with your specific UUIDs
-      if (characteristic.uuid == "5d650eb7-c41b-44f0-9704-3710f21e1c8e" &&
-          characteristic.properties.write) {
-        writeCharacteristic = characteristic;
+  Future<void> attemptReconnection(BluetoothDevice device) async {
+    if (isReconnecting) return;
+    isReconnecting = true;
+
+    for (int i = 0; i < reconnectDuration.inSeconds / 5; i++) {
+      if (isConnected) break;
+
+      try {
+        logger.i("Attempting to reconnect...");
+        await device.connect(autoConnect: false);
+        updateConnectionState(true, device);
+        logger.i("Reconnected to device: ${device.platformName}");
+        break;
+      } catch (e) {
+        logger.w("Reconnection attempt failed: $e");
+        await Future.delayed(const Duration(seconds: 5));
       }
-      if ((characteristic.uuid == "5d650eb7-c41b-44f0-9704-3710f21e1c8e") &&
-          (characteristic.properties.notify || characteristic.properties.indicate)) {
-        notifyCharacteristic = characteristic;
-        try {
-          await notifyCharacteristic!.setNotifyValue(true);
-          notifyCharacteristic!.value.listen((value) {
-            onValueReceived(value);
-          });
-        } catch (e) {
-          logger.e("Error enabling notifications: $e");
+    }
+
+    isReconnecting = false;
+  }
+
+  void updateConnectionState(bool state, [BluetoothDevice? device]) {
+    isConnected = state;
+    connectedDevice = device;
+    notifyListeners();
+  }
+
+  void discoverServices(BluetoothDevice device) async {
+    try {
+      List<BluetoothService> services = await device.discoverServices();
+      for (BluetoothService service in services) {
+        for (BluetoothCharacteristic characteristic
+            in service.characteristics) {
+          if (characteristic.properties.write) {
+            writeCharacteristic = characteristic;
+          }
+          if (characteristic.properties.notify) {
+            notifyCharacteristic = characteristic;
+            await notifyCharacteristic?.setNotifyValue(true);
+            notifyCharacteristic?.lastValueStream.listen((value) {
+              onValueReceived(value);
+            });
+          }
         }
       }
-    }
-  }
-  notifyListeners();
-}
-
-  // Method to send commands
-  Future<void> sendCommand(String command) async {
-    if (writeCharacteristic != null) {
-      sendLargeMessage(writeCharacteristic!, command);
-      logger.i("Command sent: $command");
-    } else {
-      logger.e("Write characteristic is null");
-      disconnectDevice();
+    } catch (e) {
+      logger.e("Failed to discover services: $e");
     }
   }
 
-  void sendLargeMessage(
-      BluetoothCharacteristic characteristic, String message) async {
-    int chunkSize = 20;
-    int messageLength = message.length;
-    int totalChunks = (messageLength + chunkSize - 1) ~/ chunkSize;
+  void scanForDevices({bool rescan = false}) {
+    if (isScanning && !rescan) return;
 
-    for (int i = 0; i < totalChunks; i++) {
-      int chunkStart = i * chunkSize;
-      int chunkEnd = chunkStart + chunkSize < messageLength
-          ? chunkStart + chunkSize
-          : messageLength;
+    if (rescan) devicesList.clear();
 
-      String chunk = message.substring(chunkStart, chunkEnd);
+    isScanning = true;
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 4)).then((_) {
+      isScanning = false;
+    });
 
-      List<int> bytes = utf8.encode(chunk);
-      await characteristic.write(bytes);
-      await Future.delayed(
-          const Duration(milliseconds: 50)); // Delay to prevent congestion
+    scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
+      final newDevices = results
+          .map((r) => r.device)
+          .where((device) => device.platformName.isNotEmpty)
+          .toSet()
+          .difference(devicesList.toSet());
+      devicesList.addAll(newDevices);
+      if (newDevices.isNotEmpty) {
+        notifyListeners();
+      }
+    });
+  }
+
+  void disconnectDevice() async {
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
+      isConnected = false;
+      notifyListeners();
     }
   }
 
-  // Method to handle received values
-  void onValueReceived(List<int> value) {
+  void onValueReceived(List<int> value) async {
     String data = utf8.decode(value);
     logger.i("Received partial data: $data");
-
-    // Append to the buffer until a complete message with '#' is received
     receivedMessage += data;
-    int endIndex;
 
-    // Process each complete message
-    while ((endIndex = receivedMessage.indexOf("#")) != -1) {
-      String completeMessage = receivedMessage.substring(0, endIndex);
-      logger.i("Complete message: $completeMessage");
-      handleNotification(completeMessage);
+    while (receivedMessage.contains(";")) {
+      final endIndex = receivedMessage.indexOf(";");
+      final completeMessage = receivedMessage.substring(0, endIndex);
       receivedMessage = receivedMessage.substring(endIndex + 1);
+      handleNotification(completeMessage);
     }
   }
 
@@ -140,50 +189,124 @@ Future<void> discoverServices() async {
     logger.i("Received notification: $value");
 
     try {
-      // No need to check for '#' here
+      if (value.startsWith("ColorIndex:")) {
+        // Extract the color index value
+        String indexStr = value.substring("ColorIndex:".length).trim();
+        int? colorIndex = int.tryParse(indexStr);
+        if (colorIndex != null) {
+          // Update your app's color index
+          activeColorIndex = colorIndex;
+          logger.i("Color index updated to: $colorIndex");
+          // Optionally, update the UI or perform additional actions
+        } else {
+          logger.w("Invalid color index received: $indexStr");
+        }
+        return;
+      } else if (value.startsWith("Effect:")) {
+        // Extract the effect value
+        String effect = value.substring("Effect:".length).trim();
+        // Update your app's effect
+        activeEffect = effect;
+        logger.i("Effect updated to: $effect");
+        // Optionally, update the UI or perform additional actions
+        return;
+      }
 
-      // Check if the message is a GET_SETTINGS response (starts with "S:")
+      // Proceed to process the message
       if (value.startsWith("S:")) {
         handleSettingsResponse(value.substring(2));
-        return; // Exit after processing settings
+        return;
       }
 
-      // Handle messages starting with 'Color:'
-      else if (value.startsWith("Color:")) {
-        String colorData = value.substring(6); // Remove 'Color:'
-        List<String> rgbValues = colorData.split(',');
-        if (rgbValues.length == 3) {
-          int r = int.parse(rgbValues[0]);
-          int g = int.parse(rgbValues[1]);
-          int b = int.parse(rgbValues[2]);
-          int colorIndex = getColorIndexFromRGB(r, g, b);
-          // Update your state variable for activeColorIndex if needed
-          logger.i("Updated active color index to: $colorIndex");
-        } else {
-          logger.w("Invalid color data received: $colorData");
+      // Split the entire message by `;` to get fields
+      List<String> fields = value.split(';');
+      for (var field in fields) {
+        if (field.isEmpty) continue;
+
+        int colonIndex = field.indexOf(':');
+        if (colonIndex == -1) {
+          logger.w("Malformed field: $field");
+          continue;
+        }
+
+        String tag = field.substring(0, colonIndex);
+        String fieldValue = field.substring(colonIndex + 1);
+
+        if (tag.length < 2) {
+          logger.w("Tag too short: $tag");
+          continue;
+        }
+        int boardNumber = int.tryParse(tag[1]) ?? -1;
+        if (boardNumber == -1) {
+          logger.w("Invalid board number in tag: $tag");
+          continue;
+        }
+
+        // Use the first character of the tag to determine the field
+        String fieldTag = tag[0];
+
+        // Handle the parsed field tag and value for each board
+        switch (fieldTag) {
+          case 'n':
+            if (boardNumber == 1) {
+              nameBoard1 = fieldValue;
+              logger.i("Board 1 Name set to: $nameBoard1");
+            } else if (boardNumber == 2) {
+              nameBoard2 = fieldValue;
+              logger.i("Board 2 Name set to: $nameBoard2");
+            }
+            break;
+
+          case 'm':
+            if (boardNumber == 1) {
+              macAddrBoard1 = fieldValue;
+              logger.i("MAC Addr Board 1 set to: $macAddrBoard1");
+            } else if (boardNumber == 2) {
+              macAddrBoard2 = fieldValue;
+              logger.i("MAC Addr Board 2 set to: $macAddrBoard2");
+            }
+            break;
+
+          case 'i':
+            if (boardNumber == 1) {
+              ipAddrBoard1 = fieldValue;
+              logger.i("IP Addr Board 1 set to: $ipAddrBoard1");
+            } else if (boardNumber == 2) {
+              ipAddrBoard2 = fieldValue;
+              logger.i("IP Addr Board 2 set to: $ipAddrBoard2");
+            }
+            break;
+
+          case 'l':
+            int batteryLevel = int.tryParse(fieldValue) ?? 0;
+            if (boardNumber == 1) {
+              batteryLevelBoard1 = batteryLevel;
+              logger.i("Battery Level Board 1 set to: $batteryLevelBoard1%");
+            } else if (boardNumber == 2) {
+              batteryLevelBoard2 = batteryLevel;
+              logger.i("Battery Level Board 2 set to: $batteryLevelBoard2%");
+            }
+            break;
+
+          case 'v':
+            int batteryVoltage = int.tryParse(fieldValue) ?? 0;
+            if (boardNumber == 1) {
+              batteryVoltageBoard1 = batteryVoltage;
+              logger
+                  .i("Battery Voltage Board 1 set to: $batteryVoltageBoard1 V");
+            } else if (boardNumber == 2) {
+              batteryVoltageBoard2 = batteryVoltage;
+              logger
+                  .i("Battery Voltage Board 2 set to: $batteryVoltageBoard2 V");
+            }
+            break;
+
+          default:
+            logger.w("Unexpected field tag: $fieldTag");
+            break;
         }
       }
-
-      // Handle messages starting with 'Effect:'
-      else if (value.startsWith("Effect:")) {
-        String effect = value.substring(7); // Remove 'Effect:'
-        // Update your state variable for activeEffect if needed
-        logger.i("Updated active effect to: $effect");
-      }
-
-      // Handle messages starting with 'toggleLights:'
-      else if (value.startsWith("toggleLights:")) {
-        String status = value.substring(13); // Remove 'toggleLights:'
-        lightsOn = (status == "on");
-        logger.i("Updated lightsOn to: $lightsOn");
-        notifyListeners();
-      }
-
-      // Handle other messages
-      else {
-        // Existing code for handling other messages
-        // ...
-      }
+      notifyListeners();
     } catch (e) {
       logger.e("Error handling notification: $e");
       connectionInfo = "Error parsing notification";
@@ -191,7 +314,7 @@ Future<void> discoverServices() async {
     }
   }
 
-  // Separate function for handling settings response
+// Separate function for handling settings response
   void handleSettingsResponse(String settings) {
     logger.i("Handling settings response: $settings");
 
@@ -236,17 +359,51 @@ Future<void> discoverServices() async {
       }
     }
 
-    // After settings are processed, notify listeners
-    notifyListeners();
+    // After settings are processed, update the UI
+    // setupScreenState?.updateUIWithCurrentSettings();
   }
 
-  // Methods to send various commands
+  Future<void> sendCommand(String command) async {
+    if (writeCharacteristic != null) {
+      sendLargeMessage(writeCharacteristic!, (command));
+      logger.i("Command sent: $command");
+    } else {
+      logger.e("Write characteristic is null");
+      disconnectDevice();
+    }
+  }
+
+  Future<void> sendLargeMessage(
+      BluetoothCharacteristic characteristic, String message) async {
+    int mtu = await device!.requestMtu(240);
+    int chunkSize =
+        mtu > 3 ? mtu - 3 : 20; // Default to 20 if negotiation fails
+    int messageLength = message.length;
+    int totalChunks = (messageLength + chunkSize - 1) ~/ chunkSize;
+
+    for (int i = 0; i < totalChunks; i++) {
+      int start = i * chunkSize;
+      int end = (start + chunkSize < messageLength)
+          ? start + chunkSize
+          : messageLength;
+      String chunk = message.substring(start, end);
+
+      await characteristic.write(utf8.encode(chunk));
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   void sendColorIndex(int colorIndex) {
+    activeColorIndex = colorIndex;
+    notifyListeners();
+
     sendCommand('colorIndex:$colorIndex;');
   }
 
   void sendEffect(String effect) {
+    activeEffect = effect;
     sendCommand('Effect:$effect;');
+    notifyListeners();
   }
 
   void sendBrightness(int brightnessPercent) {
@@ -282,47 +439,4 @@ Future<void> discoverServices() async {
   void sendRestart() {
     sendCommand('sendRestart;');
   }
-
-  // Disconnect device
-  void disconnectDevice() async {
-    if (device != null) {
-      await device!.disconnect();
-      isConnected = false;
-      notifyListeners();
-    }
-  }
-
-  // Save WiFi Settings
-  void saveWiFiSettings() {
-    if (ssid.isNotEmpty && password.isNotEmpty) {
-      String command = 'SSID:$ssid;PW:$password;';
-      sendCommand(command);
-    } else {
-      logger.w("SSID or Password is empty, not sending command.");
-    }
-  }
-
-  // Save Default Settings
-  void saveDefaultSettings() {
-    List<String> commands = [];
-
-    commands.add('B1:$nameBoard1');
-    commands.add('B2:$nameBoard2');
-    commands.add('BRIGHT:$initialBrightness');
-    commands.add('SIZE:$blockSize');
-    commands.add('SPEED:$effectSpeed');
-    commands.add('CELEB:$celebrationDuration');
-    commands.add('TIMEOUT:$inactivityTimeout');
-
-    String batchCommand = '${commands.join(';')};';
-    sendCommand(batchCommand);
-  }
-
-  // Helper function
-  int getColorIndexFromRGB(int r, int g, int b) {
-    // Implement this function based on your app's logic
-    return 0; // Placeholder
-  }
-
-  // Implement other methods as needed
 }
