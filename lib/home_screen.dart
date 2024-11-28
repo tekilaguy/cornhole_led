@@ -428,7 +428,7 @@ void attemptReconnection(BluetoothDevice device) {
     setState(() {
       activeColorIndex = colorIndex;
     });
-    sendCommand('colorIndex:$colorIndex;');
+    sendCommand('ColorIndex:$colorIndex;');
   }
 
   void sendEffect(String effect) {

@@ -39,7 +39,7 @@ Preferences preferences;
 String ssid = "CornholeAP";
 String password = "Funforall";
 
-// LED Setup
+// Board LED Setup
 String board1Name = "Board 1";
 String board2Name = "Board 2";
 int brightness = 25;
@@ -47,7 +47,6 @@ unsigned long blockSize = 10;
 unsigned long effectSpeed = 25;
 int inactivityTimeout = 30;
 unsigned long irTriggerDuration = 4000;
-
 unsigned long lastActivityTime = 0;
     
 // MAC Addresses for ESP-NOW
@@ -104,18 +103,20 @@ bool oldDeviceConnected = false;
 uint32_t previousMillisBT = 0;
 const uint32_t intervalBT = 10000; // 10 seconds
 String rxValueStdStr;
+volatile bool bleDataReceived = false;
+String bleCommandBuffer = "";
 
 bool espNowEnabled = true; // ESP-NOW synchronization is enabled by default
 bool wifiConnected = false;
 bool usingFallbackAP = false;
 bool wifiEnabled = true; // Variable to toggle WiFi on and off
 
-// Add these declarations
+// Global declarations
+String lastEspNowMessage = "";
+String lastAppMessage = "";
 String espNowDataBuffer = "";
 bool espNowDataReceived = false;
 bool board2DataReceived = false; // Add this at the top with your global variables
-volatile bool bleDataReceived = false;
-String bleCommandBuffer = "";
 
 // Structure to receive data
 #pragma pack(1)
@@ -212,56 +213,13 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting setup...");
 
-  preferences.begin("cornhole", false);
-  bool tpInit = preferences.isKey("nvsInit");   
-
-  if (tpInit == false) {
-      preferences.end();                           // close the namespace in RO mode and...
-      preferences.begin("cornhole", false);
-        preferences.putString("ssid", "CornholeAP");
-        preferences.putString("password", "Funforall");
-        preferences.putString("board1Name", "Board 1");
-        preferences.putString("board2Name", "Board 2");
-        CRGB(preferences.putInt("initialColorR", 0),
-             preferences.putInt("initialColorG", 0),
-             preferences.putInt("initialColorB", 255));
-        CRGB(preferences.putInt("sportsColor1R", 191),
-             preferences.putInt("sportsColor1G", 87),
-             preferences.putInt("sportsColor1B", 0));
-        CRGB(preferences.putInt("sportsColor2R", 255),
-             preferences.putInt("sportsColor2G", 255),
-              preferences.putInt("sportsColor2B", 255));
-        preferences.putInt("brightness", 50);
-        preferences.putULong("blockSize", 15);
-        preferences.putULong("effectSpeed", 25);
-        preferences.putInt("inactivityTimeout", 30);
-        preferences.putBool("nvsInit", true); 
-
-        }
-
-        ssid = preferences.getString("ssid");
-        password = preferences.getString("password");
-        board1Name = preferences.getString("board1Name");
-        board2Name = preferences.getString("board2Name");
-        initialColor = CRGB(preferences.getInt("initialColorR"),
-                            preferences.getInt("initialColorG"),
-                            preferences.getInt("initialColorB"));
-        sportsEffectColor1 = CRGB(preferences.getInt("sportsColor1R"),
-                                  preferences.getInt("sportsColor1G"),
-                                  preferences.getInt("sportsColor1B"));
-        sportsEffectColor2 = CRGB(preferences.getInt("sportsColor2R"),
-                                  preferences.getInt("sportsColor2G"),
-                                  preferences.getInt("sportsColor2B"));
-        brightness = preferences.getInt("brightness");
-        blockSize = preferences.getULong("blockSize");
-        effectSpeed = preferences.getULong("effectSpeed");
-        inactivityTimeout = preferences.getInt("inactivityTimeout");
-      preferences.end();
+  initializePreferences(); // Initialize preferences if not already done
+  defaultPreferences();
 
   currentColor = initialColor;
   
-  setupWiFi();
   esp_wifi_set_mac(WIFI_IF_STA, masterMAC);
+  setupWiFi();
   setupEspNow();
   setupBT();
   setupOta();
@@ -315,7 +273,7 @@ void loop() {
   // Process ESP-NOW data
   if (espNowDataReceived) {
     espNowDataReceived = false; // Reset the flag
-    processEspNowData(espNowDataBuffer); // Process the received String data
+    processCommand(espNowDataBuffer); // Process the received String data
   }
   
   if (board2DataReceived) {
@@ -357,8 +315,51 @@ void initializePreferences() {
         preferences.putULong("irTriggerDuration", 4000);
 
         preferences.putBool("nvsInit", true);
+       Serial.println("Preferences initialized with default values.");
     }
     preferences.end();
+}
+
+void defaultPreferences(){
+  preferences.begin("cornhole", false);
+  ssid = preferences.getString("ssid");
+  password = preferences.getString("password");
+  board1Name = preferences.getString("board1Name");
+  board2Name = preferences.getString("board2Name");
+
+  initialColor = CRGB(preferences.getInt("initialColorR"),
+                      preferences.getInt("initialColorG"),
+                      preferences.getInt("initialColorB"));
+
+  sportsEffectColor1 = CRGB(preferences.getInt("sportsColor1R"),
+                            preferences.getInt("sportsColor1G"),
+                            preferences.getInt("sportsColor1B"));
+
+  sportsEffectColor2 = CRGB(preferences.getInt("sportsColor2R"),
+                            preferences.getInt("sportsColor2G"),
+                            preferences.getInt("sportsColor2B"));
+
+  brightness = preferences.getInt("brightness", 50);
+  blockSize = preferences.getULong("blockSize", 15);
+  effectSpeed = preferences.getULong("effectSpeed", 25);
+  inactivityTimeout = preferences.getInt("inactivityTimeout", 30);
+  irTriggerDuration = preferences.getULong("irTriggerDuration", 4000);
+
+  Serial.println("Preferences loaded into in-memory variables:");
+  Serial.println("SSID: " + ssid);
+  Serial.println("Password: " + password);
+  Serial.println("Board1 Name: " + board1Name);
+  Serial.println("Board2 Name: " + board2Name);
+  Serial.printf("Initial Color: R=%d, G=%d, B=%d\n", initialColor.r, initialColor.g, initialColor.b);
+  Serial.printf("Sports Effect Color1: R=%d, G=%d, B=%d\n", sportsEffectColor1.r, sportsEffectColor1.g, sportsEffectColor1.b);
+  Serial.printf("Sports Effect Color2: R=%d, G=%d, B=%d\n", sportsEffectColor2.r, sportsEffectColor2.g, sportsEffectColor2.b);
+  Serial.printf("Brightness: %d\n", brightness);
+  Serial.printf("Block Size: %lu\n", blockSize);
+  Serial.printf("Effect Speed: %lu\n", effectSpeed);
+  Serial.printf("Inactivity Timeout: %d\n", inactivityTimeout);
+  Serial.printf("IR Trigger Duration: %lu\n", irTriggerDuration);
+  
+  preferences.end();
 }
 
 void setupWiFi() {
@@ -377,6 +378,8 @@ void setupWiFi() {
       Serial.println("Switching to AP mode...");
       WiFi.mode(WIFI_AP_STA);
       WiFi.softAP(ssid, password);
+      // WiFi.mode(WIFI_STA);
+      // WiFi.begin(ssid, password);
       Serial.println("Soft Access Point started");
       Serial.print("Soft IP Address: ");
       Serial.println(WiFi.softAPIP());
@@ -464,28 +467,6 @@ void setupWebServer() {
     Serial.println("HTTP Server started");
 }
 
-void sendEspNowMessage(const String& message) {
-    esp_now_send(slaveMAC, (uint8_t*) message.c_str(), message.length());
-    Serial.println("ESP-NOW Message Sent: " + message);
-}
-
-bool addEspNowPeer(const uint8_t* peerAddr) {
-    esp_now_peer_info_t peerInfo;
-    memset(&peerInfo, 0, sizeof(peerInfo));
-    memcpy(peerInfo.peer_addr, peerAddr, 6);
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-
-    if (!esp_now_is_peer_exist(peerAddr)) {
-        if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-            Serial.println("Failed to add peer");
-            return false;
-        }
-        Serial.println("Peer added successfully");
-    }
-    return true;
-}
-
 void setupEspNow() {
     if (esp_now_init() != ESP_OK) {
         Serial.println("ESP-NOW Init Failed");
@@ -494,9 +475,22 @@ void setupEspNow() {
     esp_now_register_recv_cb(onDataRecv);
     esp_now_register_send_cb(onDataSent);
 
-    if (addEspNowPeer(slaveMAC)) {
-        sendEspNowMessage("Initialization Complete");
-    }
+    esp_now_peer_info_t peerInfo;
+    memset(&peerInfo, 0, sizeof(peerInfo));
+    memcpy(peerInfo.peer_addr, slaveMAC, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+
+
+    if (esp_now_is_peer_exist(slaveMAC)) {
+    esp_now_del_peer(slaveMAC);
+  }
+
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+  } else {
+    Serial.println("Peer added successfully");
+  }
 }
 
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
@@ -507,7 +501,6 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   String receivedData = String((char*)incomingData).substring(0, len);
   Serial.println("Received ESP-Now data: " + receivedData);
 
-
   if (len == sizeof(struct_message)) {
     // Received data is a struct_message
     memcpy(&board2, incomingData, sizeof(board2));
@@ -516,6 +509,7 @@ void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
     // Received data is a String message
     espNowDataBuffer = String((char*)incomingData).substring(0, len);
     espNowDataReceived = true; // Set the flag
+    sendData("app", receivedData, "");
   }
 }
 
@@ -545,6 +539,60 @@ String macToString(const uint8_t *mac) {
   char macStr[18];
   snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   return String(macStr);
+}
+
+void processEspNowData(String receivedData) {
+  int brightness;
+
+  if (receivedData.startsWith("ColorIndex:")) {
+    String indexStr = receivedData.substring(11); // Length of "ColorIndex:"
+    int index = indexStr.toInt();
+    if (index >= 0 && index < (sizeof(colors) / sizeof(colors[0]))) {
+      currentColor = colors[index];
+      setColor(currentColor);
+      colorIndex = index;
+      sendData("app", "ColorIndex", String(colorIndex));
+      Serial.println("Received ColorIndex: " + String(index));
+    } else {
+      Serial.println("Invalid ColorIndex received.");
+    }
+  } else if (receivedData.startsWith("Effect:")) {
+    String effect = receivedData.substring(7);
+    Serial.println("ESP-NOW effect: " + effect);
+    effectIndex = getEffectIndex(effect);
+    applyEffect(effect);
+    sendData("app", "Effect", effects[effectIndex]);
+
+  // } else if (sscanf(receivedData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
+  //   currentColor = CRGB(r, g, b);
+  //   setColor(currentColor);
+  //   sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
+  //   Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
+
+  } else if (receivedData.startsWith("brightness:") && sscanf(receivedData.c_str(), "brightness:%d", &brightness) == 1) {
+    FastLED.setBrightness(brightness);
+    FastLED.show();
+    Serial.printf("Received brightness: %d\n", brightness);
+    sendData("app", "brightness", String(brightness));
+
+  } else if (receivedData == "Board 2") {
+    // Handle struct_message data if necessary
+    // sendBoard1Info();
+    // sendBoard2Info(receivedData);
+
+  } else if (receivedData.startsWith("toggleLights:")) {
+    String status = receivedData.substring(13);
+    bool lightsStatus = (status == "on");
+    toggleLights(lightsStatus);
+    sendData("app", "toggleLights:", status);
+
+  } else if (receivedData == "Restart") {
+    restartCommand();
+
+  } else {
+    Serial.print("Unknown data received:");
+    Serial.println(receivedData);
+  }
 }
 
 void setupBT() {
@@ -636,6 +684,7 @@ void handleBluetoothData(String command) {
     
     // Process the complete command
     processCommand(completeCommand);
+    sendData("espNow", completeCommand, "");
     Serial.println("Received full data: " + completeCommand);
 
     // Remove the processed command from accumulated data
@@ -655,17 +704,15 @@ void processCommand(String command) {
     Serial.println("All saved variables cleared.");
     delay(3000);
     sendRestartCommand();
+    lastEspNowMessage = "";
+    lastAppMessage = "";
   } else  if  (command.startsWith("SSID:")) {
         ssid = command.substring(5);
         preferences.putString("ssid", ssid);
-        Serial.print("SSID set to: ");
-        Serial.println(ssid);
 
   } else if  (command.startsWith("PW:")) {
         password = command.substring(3);
         preferences.putString("password", password);
-        Serial.print("Password set to: ");
-        Serial.println(password);
 
   } else if (command.startsWith("INITIALCOLOR:")) {
     int r, g, b;
@@ -674,8 +721,6 @@ void processCommand(String command) {
     preferences.putInt("initialColorR", r);
     preferences.putInt("initialColorG", g);
     preferences.putInt("initialColorB", b);
-    Serial.printf("Initial color set to R:%d, G:%d, B:%d\n", r, g, b);
-    sendData("espNow", "INITIALCOLOR", String(initialColor.r) + "," + String(initialColor.g) + "," + String(initialColor.b));
 
   } else if (command.startsWith("SPORTCOLOR1:")) {
     int r, g, b;
@@ -684,8 +729,6 @@ void processCommand(String command) {
     preferences.putInt("sportsColor1R", r);
     preferences.putInt("sportsColor1G", g);
     preferences.putInt("sportsColor1B", b);
-    Serial.printf("Sport Color 1 set to R:%d, G:%d, B:%d\n", r, g, b);
-    sendData("espNow", "SPORTCOLOR1", String(sportsEffectColor1.r) + "," + String(sportsEffectColor1.g) + "," + String(sportsEffectColor1.b));
 
   } else if (command.startsWith("SPORTCOLOR2:")) {
     int r, g, b;
@@ -694,75 +737,50 @@ void processCommand(String command) {
     preferences.putInt("sportsColor2R", r);
     preferences.putInt("sportsColor2G", g);
     preferences.putInt("sportsColor2B", b);
-    Serial.printf("Sport Color 2 set to R:%d, G:%d, B:%d\n", r, g, b);
-    sendData("espNow", "SPORTCOLOR2", String(sportsEffectColor2.r) + "," + String(sportsEffectColor2.g) + "," + String(sportsEffectColor2.b));
 
   } else if  (command.startsWith("B1:")) {
         board1Name = command.substring(3);
         preferences.putString("board1Name", board1Name);
-        Serial.print("Board 1 Name set to: ");
-        Serial.println(board1Name);
 
    } else if  (command.startsWith("B2:")) {
         board2Name = command.substring(3);
         preferences.putString("board1Name", board1Name);
-        Serial.print("Board 2 Name set to: ");
-        Serial.println(board2Name);
-        sendData("espNow","B2",String(board2Name));
 
     } else if  (command.startsWith("BRIGHT:")) {
         sscanf(command.c_str(), "BRIGHT:%d", &brightness);
         preferences.putInt("brightness", brightness);
         FastLED.setBrightness(brightness);
         FastLED.show();
-        Serial.print("Brightness set to: ");
-        Serial.println(brightness);
-        sendData("espNow","brightness", String(brightness));
 
     } else if (command.startsWith("SIZE:")) {
         sscanf(command.c_str(), "SIZE%lu", &blockSize);
         preferences.putULong("blockSize", blockSize);
-        Serial.print("Effect size set to: ");
-        Serial.println(blockSize);
-        sendData("espNow","SIZE",String(blockSize));
 
     } else if (command.startsWith("SPEED:")) {
         sscanf(command.c_str(), "SPEED:%lu", &effectSpeed);
         preferences.putULong("effectSpeed", effectSpeed);
-        Serial.print("Effect speed set to: ");
-        Serial.println(effectSpeed);
-        sendData("espNow","SPEED",String(effectSpeed));
 
     } else if (command.startsWith("CELEB:")) {
         sscanf(command.c_str(), "CELEB:%lu", &irTriggerDuration);
         preferences.putULong("irTriggerDuration", irTriggerDuration);
-        Serial.print("Celebration duration set to: ");
-        Serial.println(irTriggerDuration);
-        sendData("espNow","CELEB",String(irTriggerDuration));
 
     } else if (command.startsWith("TIMEOUT:")) {
         sscanf(command.c_str(), "TIMEOUT:%d", &inactivityTimeout);
         preferences.putInt("inactivityTimeout", inactivityTimeout);
-        Serial.print("Inactivity timeout set to: ");
-        Serial.println(inactivityTimeout);
-        sendData("espNow","TIMEOUT",String(inactivityTimeout));
 
     } else if (command.startsWith("Effect:")) {
         String effect = command.substring(7);
         effectIndex = getEffectIndex(effect); // Set the effect index based on received effect
         applyEffect(effect);
-        sendData("espNow","Effect", effect);
 
-    } else if (command.startsWith("colorIndex:")) {
-        int index;
+    } else if (command.startsWith("ColorIndex:")) {
+        int index = command.substring(11).toInt();
         sscanf(command.c_str(), "colorIndex:%d", &index);
         if (index >= 0 && index < sizeof(colors) / sizeof(colors[0])) {
             currentColor = colors[index];
             colorIndex = index; // Update the color index
             setColor(currentColor);
-            sendData("espNow","ColorIndex", String(colorIndex));
-            Serial.print("Color set to index: ");
-            Serial.println(index);
+
         } else {
             Serial.println("Invalid color index");
         }
@@ -770,20 +788,16 @@ void processCommand(String command) {
   } else if (command.startsWith("brightness:") && sscanf(command.c_str(), "brightness:%d", &brightness) == 1) {
     FastLED.setBrightness(brightness);
     FastLED.show();
-    Serial.printf("Received brightness: %d\n", brightness);
-    sendData("espNow","brightness", String(brightness));
 
     } else if (command.startsWith("toggleWiFi")) {
         String status = command.substring(11);
         bool wifiStatus = (status == "on");
         toggleWiFi(wifiStatus);
-        sendData("espNow","toggleWiFi",status);
 
     } else if (command.startsWith("toggleLights")) {
         String status = command.substring(13);
         bool lightsStatus = (status == "on");
         toggleLights(lightsStatus);
-        sendData("espNow","toggleLights",status);
 
     } else if (command.startsWith("toggleEspNow")) {
         String status = command.substring(13);
@@ -795,21 +809,19 @@ void processCommand(String command) {
 
     } else if (command.startsWith("GET_SETTINGS")) {
         sendSettings();
-        //sendData("app", "ColorIndex", String(colorIndex));
-        //sendData("app","Effect",effects[effectIndex]);
 
     } else if (command =="GET_INFO") {
         const char* message = command.c_str();
         esp_err_t result = esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
-        sendBoard1Info();
+        //sendBoard12nfo();
         
 
     } else if (command.startsWith("UPDATE")) {
         //sendBoard1Info();
-        sendData("espNow","OTA","UPDATE");
+        //sendData("espNow","OTA","UPDATE");
 
     } else {
-        Serial.println("Unknown BLE command");
+        Serial.println("Unknown command");
     }
   preferences.end();
 }
@@ -840,57 +852,6 @@ void updateBluetoothData(String data) {
     }
 }
 
-void processEspNowData(String receivedData) {
-  int brightness;
-
-  if (receivedData.startsWith("ColorIndex:")) {
-    String indexStr = receivedData.substring(11); // Length of "ColorIndex:"
-    int index = indexStr.toInt();
-    if (index >= 0 && index < (sizeof(colors) / sizeof(colors[0]))) {
-      currentColor = colors[index];
-      setColor(currentColor);
-      colorIndex = index;
-      sendData("app", "ColorIndex", String(colorIndex));
-      Serial.println("Received ColorIndex: " + String(index));
-    } else {
-      Serial.println("Invalid ColorIndex received.");
-    }
-  } else if (receivedData.startsWith("Effect:")) {
-    String effect = receivedData.substring(7);
-    Serial.println("ESP-NOW effect: " + effect);
-    effectIndex = getEffectIndex(effect);
-    applyEffect(effect);
-    sendData("app", "Effect", effects[effectIndex]);
-
-  // } else if (sscanf(receivedData.c_str(), "%d,%d,%d", &r, &g, &b) == 3) {
-  //   currentColor = CRGB(r, g, b);
-  //   setColor(currentColor);
-  //   sendData("app", "Color", String(currentColor.r) + "," + String(currentColor.g) + "," + String(currentColor.b));
-  //   Serial.printf("Received color: R=%d, G=%d, B=%d\n", r, g, b);
-
-  } else if (receivedData.startsWith("brightness:") && sscanf(receivedData.c_str(), "brightness:%d", &brightness) == 1) {
-    FastLED.setBrightness(brightness);
-    FastLED.show();
-    Serial.printf("Received brightness: %d\n", brightness);
-    sendData("app", "brightness", String(brightness));
-
-  } else if (receivedData == "Board 2") {
-    // Handle struct_message data if necessary
-    // sendBoard1Info();
-    // sendBoard2Info(receivedData);
-
-  } else if (receivedData.startsWith("toggleLights:")) {
-    String status = receivedData.substring(13);
-    bool lightsStatus = (status == "on");
-    toggleLights(lightsStatus);
-    sendData("app", "toggleLights:", status);
-
-  } else {
-    Serial.print("Unknown data received:");
-    Serial.println(receivedData);
-  }
-}
-
 void sendSettings() {
     char data[512];
     sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%d;SPEED:%d;CELEB:%d;TIMEOUT:%d;",
@@ -911,18 +872,37 @@ void sendSettings() {
 }
 
 void sendData(const String& device, const String& type, const String& data) {
-  char message[250];
-
+  char messageBuffer[250];
+  
   if (device == "espNow") {
-    snprintf(message, sizeof(message), "%s:%s", type.c_str(), data.c_str());
-    esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
-    Serial.println("Sending to peer: " + String(message));
+    snprintf(messageBuffer, sizeof(messageBuffer), "%s:%s", type.c_str(), data.c_str());
+    String currentMessage = String(messageBuffer);
+    
+    // Check if the current message is different from the last sent message
+    if (currentMessage != lastEspNowMessage) {
+      esp_now_send(slaveMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
+      Serial.println("Sending to peer: " + currentMessage);
+      
+      // Update the last sent message
+      lastEspNowMessage = currentMessage;
+    } else {
+      Serial.println("Duplicate ESP-NOW message detected. Skipping send.");
+    }
   }
   
-  if (device == "app") {
-    String message = type + ":" + data +";";
-    updateBluetoothData(message);
-    Serial.println("Sending to app: " + message);
+  else if (device == "app") {
+    String currentMessage = type + ":" + data + ";";
+    
+    // Check if the current message is different from the last sent message
+    if (currentMessage != lastAppMessage) {
+      updateBluetoothData(currentMessage);
+      Serial.println("Sending to app: " + currentMessage);
+      
+      // Update the last sent message
+      lastAppMessage = currentMessage;
+    } else {
+      Serial.println("Duplicate App message detected. Skipping send.");
+    }
   }
 }
 
@@ -945,7 +925,6 @@ void sendDefaults() {
   Serial.print("Default setting sent to Board 2");
 }
 
-
 void sendRestartCommand() {
   char message[8] = "Restart";
   esp_err_t result = esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
@@ -957,6 +936,8 @@ void sendRestartCommand() {
   } else {
     Serial.println("Error sending the restart command");
   }
+  lastEspNowMessage = "";
+  lastAppMessage = "";
 }
 
 void sendBoard1Info() {
@@ -1006,6 +987,12 @@ void sendBoard2Info(struct_message board2){
 //       break;
 //   }
 // }
+
+void restartCommand() {
+   delay(100);
+
+   ESP.restart();
+}
 
 void singleClick() {
   if (!lightsOn) {
