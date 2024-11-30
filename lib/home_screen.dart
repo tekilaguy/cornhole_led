@@ -472,7 +472,7 @@ void attemptReconnection(BluetoothDevice device) {
   }
 
   void sendRestart() {
-    sendCommand('sendRestart;');
+    sendCommand('Restart;');
   }
 
 // Inside HomeScreenState class

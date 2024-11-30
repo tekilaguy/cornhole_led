@@ -376,10 +376,8 @@ void setupWiFi() {
     if (attempts > 20) {
      Serial.println("");
       Serial.println("Switching to AP mode...");
-      WiFi.mode(WIFI_AP_STA);
+      WiFi.mode(WIFI_STA);
       WiFi.softAP(ssid, password);
-      // WiFi.mode(WIFI_STA);
-      // WiFi.begin(ssid, password);
       Serial.println("Soft Access Point started");
       Serial.print("Soft IP Address: ");
       Serial.println(WiFi.softAPIP());
@@ -813,7 +811,7 @@ void processCommand(String command) {
     } else if (command =="GET_INFO") {
         const char* message = command.c_str();
         esp_err_t result = esp_now_send(slaveMAC, (uint8_t *)message, strlen(message));
-        //sendBoard12nfo();
+        sendBoard1Info();
         
 
     } else if (command.startsWith("UPDATE")) {

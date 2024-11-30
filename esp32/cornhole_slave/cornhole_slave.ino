@@ -363,38 +363,20 @@ void defaultPreferences(){
 }
 
 void setupWiFi() {
-  Serial.println("Connecting to WiFi...");
-    delay(500);
+    Serial.println("Connecting to WiFi...");
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
+    WiFi.begin(ssid,password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.println("Connecting to WiFi...");
+    }
 
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-//    attempts++;
-    Serial.print(".");
-    // if (attempts > 20) {
-    //  Serial.println("");
-    //   Serial.println("Switching to AP mode...");
-    //   WiFi.mode(WIFI_AP_STA);
-    //   WiFi.softAP(ssid, password);
-       WiFi.mode(WIFI_STA);
-       WiFi.begin(ssid, password);
-    //   Serial.println("Soft Access Point started");
-    //   Serial.print("Soft IP Address: ");
-    //   Serial.println(WiFi.softAPIP());
-    //   Serial.print("Soft SSID: ");
-    //   Serial.println(ssid);
-    //   ipAddress = WiFi.softAPIP().toString().c_str();
-    //   usingFallbackAP = "true";
-    //   return;
-    // }
-  }
-  ipAddress = WiFi.localIP().toString().c_str();
-  usingFallbackAP = "false";
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+    Serial.println();
+    Serial.println("Connected to WiFi");
+    Serial.println("IP Address: ");
+    Serial.println(WiFi.localIP());
+      Serial.print("Soft SSID: ");
+      Serial.println(ssid);
 }
 
 void setupWebServer() {
