@@ -5,6 +5,7 @@
 #include <FastLED.h>
 #include <OneButton.h>
 #include <esp_now.h>
+#include <esp_mac.h>
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <BLEDevice.h>
@@ -239,6 +240,7 @@ void setup() {
 
   setupWiFi();
   esp_wifi_set_mac(WIFI_IF_STA, hostMAC);
+  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
   printMacAddress();
   setupEspNow();
 
@@ -311,7 +313,6 @@ void loop() {
     ledEffects.applyEffect(effects[effectIndex]);
   }
   
-
   // Handle OTA updates (MASTER only)
   if (deviceRole == MASTER) {
     ArduinoOTA.handle();
@@ -376,6 +377,27 @@ void defaultPreferences(){
   inactivityTimeout = preferences.getInt("inactivityTimeout", 30);
   irTriggerDuration = preferences.getULong("irTriggerDuration", 4000);
   
+  Serial.println("Preferences loaded into in-memory variables:");
+  Serial.println("SSID: " + ssid);
+  Serial.println("Password: " + password);
+  Serial.println("Board1 Name: " + board1Name);
+  Serial.println("Board2 Name: " + board2Name);
+  Serial.printf("Initial Color: R=%d, G=%d, B=%d\n", initialColor.r, initialColor.g, initialColor.b);
+  Serial.printf("Sports Effect Color1: R=%d, G=%d, B=%d\n", sportsEffectColor1.r, sportsEffectColor1.g, sportsEffectColor1.b);
+  Serial.printf("Sports Effect Color2: R=%d, G=%d, B=%d\n", sportsEffectColor2.r, sportsEffectColor2.g, sportsEffectColor2.b);
+  Serial.printf("Brightness: %d\n", brightness);
+  Serial.printf("Block Size: %lu\n", blockSize);
+  Serial.printf("Effect Speed: %lu\n", effectSpeed);
+  Serial.printf("Inactivity Timeout: %d\n", inactivityTimeout);
+  Serial.printf("IR Trigger Duration: %lu\n", irTriggerDuration);
+  
+    // Update the LEDEffects object with the new values
+    ledEffects.setBrightness(brightness);
+    ledEffects.setBlockSize(blockSize);
+    ledEffects.setEffectSpeed(effectSpeed);
+    ledEffects.setColor(initialColor);
+    ledEffects.setSportsEffectColors(sportsEffectColor1, sportsEffectColor2);
+
   preferences.end();
 }
 
@@ -424,7 +446,7 @@ void setupWiFi() {
 
 // ---------------------- Setup ESP-NOW ----------------------
 void printMacAddress() {
-    WiFi.macAddress(deviceMAC); // Retrieve MAC address using WiFi.macAddress()
+    esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA); // Retrieve MAC address using esp_read_mac
 
     Serial.print("Device MAC Address: ");
     for(int i = 0; i < 6; i++) {
@@ -496,7 +518,6 @@ void setupBT() {
   pAdvertising->setMinPreferred(0x06);  // Helps with iPhone connection issues
   pAdvertising->setMinPreferred(0x12);
   
-  BLEDevice::startAdvertising();
   Serial.println("BLE Device is now advertising");
 }
 
@@ -660,7 +681,7 @@ void processCommand(String command) {
 
   } else if (command.startsWith("n2:")) {
       board2Name = command.substring(3);
-      Serial.println("Sending Board 2 info to App: " + command);
+      //Serial.println("Sending Board 2 info to App: " + command);
 
   } else if (command.startsWith("SSID:")) {
       ssid = command.substring(5);
@@ -680,6 +701,7 @@ void processCommand(String command) {
       preferences.putInt("initialColorG", g);
       preferences.putInt("initialColorB", b);
       ledEffects.setColor(initialColor);
+      ledEffects.setInitialColor(initialColor);
       Serial.println("Initial color updated.");
 
   } else if (command.startsWith("SPORTCOLOR1:")) {
@@ -723,11 +745,13 @@ void processCommand(String command) {
   } else if (command.startsWith("SIZE:")) {
         sscanf(command.c_str(), "SIZE:%lu", &blockSize);
         preferences.putULong("blockSize", blockSize);
+        ledEffects.setBlockSize(blockSize); 
         Serial.println("Block Size updated to: " + String(blockSize));
 
   } else if (command.startsWith("SPEED:")) {
         sscanf(command.c_str(), "SPEED:%lu", &effectSpeed);
         preferences.putULong("effectSpeed", effectSpeed);
+        ledEffects.setEffectSpeed(effectSpeed); 
         Serial.println("Effect Speed updated to: " + String(effectSpeed));
 
   } else if (command.startsWith("CELEB:")) {
@@ -818,7 +842,7 @@ void sendBoardInfo() {
   char data[256];
 
   if (deviceRole == MASTER) {
-  sprintf(data, "n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d;",
+  sprintf(data, "n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d",
             board1Name.c_str(),
             deviceMAC[0], deviceMAC[1], deviceMAC[2],
             deviceMAC[3], deviceMAC[4], deviceMAC[5],
@@ -826,6 +850,8 @@ void sendBoardInfo() {
             readBatteryLevel(),
             (int)readBatteryVoltage());
   updateBluetoothData(data);
+  Serial.print("Sending Board info to app: ");
+  Serial.println(data);
   } else {
   sprintf(data, "n2:%s;m2:%02x:%02x:%02x:%02x:%02x:%02x;i2:%s;l2:%d;v2:%d;",
             board2Name.c_str(),
@@ -835,14 +861,20 @@ void sendBoardInfo() {
             readBatteryLevel(),
             (int)readBatteryVoltage());
    esp_err_t result = esp_now_send(peerMAC, (uint8_t *)data, strlen(data));
+  Serial.print("Sending Board info to ESP-NOW: ");
+  Serial.println(data);
   }
 
-  Serial.print("Sending Board info to app: ");
-  Serial.println(data);
 }
 
 // ---------------------- BLE and ESP-NOW Callbacks ----------------------
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
+    if (memcmp(info->src_addr, deviceMAC, 6) == 0) {
+        // Message sent from self, ignore
+        Serial.println("Received own message via ESP-NOW, ignoring.");
+        return;
+    }
+
   char msg[256];
   snprintf(msg, sizeof(msg), "Data received from: %02x:%02x:%02x:%02x:%02x:%02x", info->src_addr[0], info->src_addr[1], info->src_addr[2], info->src_addr[3], info->src_addr[4], info->src_addr[5]);
    
@@ -893,7 +925,7 @@ String macToString(const uint8_t *mac) {
 // ---------------------- Communication Functions ----------------------
 void sendSettings() {
     char data[512];
-    sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%lu;SPEED:%lu;CELEB:%lu;TIMEOUT:%d;",
+    sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%lu;SPEED:%lu;CELEB:%lu;TIMEOUT:%d",
             ssid.c_str(),
             password.c_str(),
             board1Name.c_str(),
@@ -907,15 +939,16 @@ void sendSettings() {
             irTriggerDuration,
             inactivityTimeout);
 
-    sendData("espNow", "SETTINGS", String(data));
+//   sendData("espNow", "SETTINGS", String(data));
     if (deviceRole == MASTER) {
-      sendData("app", "SETTINGS", String(data));
+      sendData("app", String(data),"");
     }
 }
 
 void sendData(const String& device, const String& type, const String& data) {
   char messageBuffer[250];
-  
+  String currentMessage;
+
   if (device == "espNow") {
     snprintf(messageBuffer, sizeof(messageBuffer), "%s:%s", type.c_str(), data.c_str());
     String currentMessage = String(messageBuffer);
@@ -933,7 +966,11 @@ void sendData(const String& device, const String& type, const String& data) {
   }
   
   else if (device == "app" && deviceRole == MASTER) {
-    String currentMessage = type + ":" + data + ";";
+    if (data == "") {
+      currentMessage = type;
+    } else {
+      currentMessage = type + ":" + data + ";";
+    }
     
     // Check if the current message is different from the last sent message
     if (currentMessage != lastAppMessage) {
@@ -1001,15 +1038,15 @@ void longPressStart() {
   toggleLights(!lightsOn);
  
   String message = String(lightsOn ? "on" : "off");
-  sendData("espNow","toggleLights",message);
+  sendData("espNow","toggleLights",lightsOn ? "on" : "off");
   if (deviceRole == MASTER) {
-    sendData("app","toggleLights",message);
   }
   Serial.println("Long Press: Lights turned " + message);
 }
 
 void longPressStop() {
     // Log stop for debugging, if needed
+    sendData("app","toggleLights",lightsOn ? "on" : "off");
     Serial.println("Long Press Released");
 }
 

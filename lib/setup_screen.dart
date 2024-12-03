@@ -55,6 +55,26 @@ class SetupScreenState extends State<SetupScreen> {
   late TextEditingController passwordController;
   bool setupComplete = false;
 
+// Previous settings for comparison
+  String? previousNameBoard1;
+  String? previousNameBoard2;
+  double? previousInitialBrightness;
+  double? previousBlockSize;
+  double? previousEffectSpeed;
+  double? previousCelebrationDuration;
+  double? previousInactivityTimeout;
+  Color? previousInitialStartupColor;
+  Color? previousSportEffectColor1;
+  Color? previousSportEffectColor2;
+  String? previousssid;
+  String? previouspassword;
+
+  @override
+  void initState() {
+    super.initState();
+    initializeSettings();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -68,17 +88,10 @@ class SetupScreenState extends State<SetupScreen> {
       previousEffectSpeed = widget.effectSpeed;
       previousCelebrationDuration = widget.celebrationDuration;
       previousInactivityTimeout = widget.inactivityTimeout;
-
-      // Initialize current variables to previous values
-      initialBrightness = previousInitialBrightness!;
-      blockSize = previousBlockSize!;
-      effectSpeed = previousEffectSpeed!;
-      celebrationDuration = previousCelebrationDuration!;
-      inactivityTimeout = previousInactivityTimeout!;
-
-      sportEffectColor1 = widget.sportEffectColor1;
-      sportEffectColor2 = widget.sportEffectColor2;
-      initialStartupColor = widget.initialStartupColor;
+      previousSportEffectColor1 = widget.sportEffectColor1;
+      previousSportEffectColor2 = widget.sportEffectColor2;
+      previousInitialStartupColor = widget.initialStartupColor;
+      
 
       ssidController = TextEditingController(text: ssid);
       passwordController = TextEditingController(text: password);
@@ -89,9 +102,20 @@ class SetupScreenState extends State<SetupScreen> {
         isLoading = true; // Show loading indicator
       });
       widget.sendCommand('GET_SETTINGS;');
-      setupComplete = true; // Set this flag to true after sending GET_SETTINGS
-      isLoading = false;
     }
+  }
+
+  void initializeSettings() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    await widget.sendCommand('GET_SETTINGS;');
+    setupComplete = true; // Set this flag to true after sending GET_SETTINGS
+
+    setState(() {
+      isLoading = false;
+    });
   }
 
   void saveWiFiSettings() {
@@ -211,6 +235,9 @@ class SetupScreenState extends State<SetupScreen> {
       effectSpeed = effectSpeed;
       celebrationDuration = celebrationDuration;
       inactivityTimeout = inactivityTimeout;
+      initialStartupColor = initialStartupColor;
+      sportEffectColor1 = sportEffectColor1;
+      sportEffectColor2 = sportEffectColor2;
       isLoading = false;
       logger.i("Settings received and UI updated, isLoading set to false");
     });
@@ -222,7 +249,9 @@ class SetupScreenState extends State<SetupScreen> {
     int blue = (color.value) & 0xFF;
 
     String command = '$colorName:$red,$green,$blue';
-    homeScreenState!.sendCommand(command);
+    if (homeScreenState != null) {
+      homeScreenState!.sendCommand(command);
+    }
   }
 
   void clearSavedVariables() {
@@ -557,7 +586,7 @@ class SetupScreenState extends State<SetupScreen> {
         Slider(
           value: value,
           min: 0,
-          max: 150,
+          max: 100,
           divisions: (100 - 5) ~/ 5,
           label: value.round().toString(),
           onChanged: onChanged,

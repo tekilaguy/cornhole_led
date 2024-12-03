@@ -42,7 +42,9 @@ class InfoScreenState extends State<InfoScreen> {
     espNowEnabled = args['espNowEnabled'] as bool? ?? false;
 
     homeScreenState = args['homeScreenState'] as HomeScreenState?;
-    homeScreenState!.sendCommand('GET_INFO;');
+    if (homeScreenState != null) {
+      homeScreenState!.sendCommand('GET_INFO;');
+    }
 
 //    extractConnectionInfo(connectionInfo);
   }

@@ -6,8 +6,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:logger/logger.dart';
 import 'global.dart';
 
-
-
 import 'widgets/background.dart';
 import 'widgets/section.dart';
 import 'widgets/status_indicators.dart';
@@ -109,27 +107,27 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-void attemptReconnection(BluetoothDevice device) {
-  if (reconnectTimer?.isActive ?? false) reconnectTimer?.cancel();
+  void attemptReconnection(BluetoothDevice device) {
+    if (reconnectTimer?.isActive ?? false) reconnectTimer?.cancel();
 
-  reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-    if (timer.tick >= reconnectDuration.inSeconds / 5) {
-      logger.i("Reconnection attempts timed out.");
-      timer.cancel();
-    } else if (!isConnected) {
-      logger.i("Attempting to reconnect...");
-      try {
-        await Future.delayed(const Duration(seconds: 2)); // Add a delay
-        await device.connect(autoConnect: false);
-        logger.i("Reconnected to device: ${device.platformName}");
-        manageBluetoothState(device); // Re-register state listener
-        timer.cancel(); // Stop the timer once reconnected
-      } catch (e) {
-        logger.e("Reconnection attempt failed: $e");
+    reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (timer.tick >= reconnectDuration.inSeconds / 5) {
+        logger.i("Reconnection attempts timed out.");
+        timer.cancel();
+      } else if (!isConnected) {
+        logger.i("Attempting to reconnect...");
+        try {
+          await Future.delayed(const Duration(seconds: 2)); // Add a delay
+          await device.connect(autoConnect: false);
+          logger.i("Reconnected to device: ${device.platformName}");
+          manageBluetoothState(device); // Re-register state listener
+          timer.cancel(); // Stop the timer once reconnected
+        } catch (e) {
+          logger.e("Reconnection attempt failed: $e");
+        }
       }
-    }
-  });
-}
+    });
+  }
 
   void discoverServices(BluetoothDevice device) async {
     List<BluetoothService> services = await device.discoverServices();
@@ -236,6 +234,21 @@ void attemptReconnection(BluetoothDevice device) {
           logger.i("Effect updated to: $effect");
           // Optionally, update the UI or perform additional actions
           return;
+        } else if (value.startsWith("toggleLights:")) {
+          // Extract the value after "toggleLights:"
+          String status = value.substring("toggleLights:".length).trim();
+
+          // Convert the extracted value to a boolean
+          bool lightsOn = (status.toLowerCase() == "on");
+
+          // Log the current status
+          logger.i("Lights toggled to: ${lightsOn ? 'ON' : 'OFF'}");
+
+          // Update the UI or perform additional actions based on the new lightsOn status
+          setState(() {
+            lightsOn = lightsOn; // Update your app's state
+          });
+          return;
         }
 
         // Proceed to process the message
@@ -247,7 +260,7 @@ void attemptReconnection(BluetoothDevice device) {
         // Split the entire message by `;` to get fields
         List<String> fields = value.split(';');
         for (var field in fields) {
-          if (field.isEmpty) continue; 
+          if (field.isEmpty) continue;
 
           int colonIndex = field.indexOf(':');
           if (colonIndex == -1) {
@@ -390,7 +403,7 @@ void attemptReconnection(BluetoothDevice device) {
     }
 
     // After settings are processed, update the UI
-   // setupScreenState?.updateUIWithCurrentSettings();
+    setupScreenState?.updateUIWithCurrentSettings();
   }
 
   Future<void> sendCommand(String command) async {
@@ -506,35 +519,35 @@ void attemptReconnection(BluetoothDevice device) {
     }
   }
 
-void navigateToSetupScreen() async {
-  final result = await Navigator.pushNamed(
-    context,
-    '/setup',
-    arguments: {
-      'ssid': ssid,
-      'password': password,
-      'nameBoard1': nameBoard1,
-      'nameBoard2': nameBoard2,
-      'initialBrightness': initialBrightness,
-      'effectSpeed': effectSpeed,
-      'blockSize': blockSize,
-      'celebrationDuration': celebrationDuration,
-      'inactivityTimeout': inactivityTimeout,
-      'sportEffectColor1': sportEffectColor1,
-      'sportEffectColor2': sportEffectColor2,
-      'initialStartupColor': initialStartupColor,
-      'sendCommand': sendCommand, // Pass the sendCommand function
-    },
-  );
+  void navigateToSetupScreen() async {
+    final result = await Navigator.pushNamed(
+      context,
+      '/setup',
+      arguments: {
+        'ssid': ssid,
+        'password': password,
+        'nameBoard1': nameBoard1,
+        'nameBoard2': nameBoard2,
+        'initialBrightness': initialBrightness,
+        'effectSpeed': effectSpeed,
+        'blockSize': blockSize,
+        'celebrationDuration': celebrationDuration,
+        'inactivityTimeout': inactivityTimeout,
+        'sportEffectColor1': sportEffectColor1,
+        'sportEffectColor2': sportEffectColor2,
+        'initialStartupColor': initialStartupColor,
+        'sendCommand': sendCommand, // Pass the sendCommand function
+      },
+    );
 
-  if (result != null && result is Map<String, dynamic>) {
-    setState(() {
-      wifiEnabled = result['wifiEnabled'] ?? wifiEnabled;
-      lightsOn = result['lightsOn'] ?? lightsOn;
-      espNowEnabled = result['espNowEnabled'] ?? espNowEnabled;
-    });
+    if (result != null && result is Map<String, dynamic>) {
+      setState(() {
+        wifiEnabled = result['wifiEnabled'] ?? wifiEnabled;
+        lightsOn = result['lightsOn'] ?? lightsOn;
+        espNowEnabled = result['espNowEnabled'] ?? espNowEnabled;
+      });
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {

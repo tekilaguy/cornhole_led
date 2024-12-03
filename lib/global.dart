@@ -57,20 +57,6 @@ double effectSpeed = 25;
 double celebrationDuration = 4000;
 double inactivityTimeout = 10;
 
-// Previous settings for comparison
-String? previousNameBoard1;
-String? previousNameBoard2;
-double? previousInitialBrightness;
-double? previousBlockSize;
-double? previousEffectSpeed;
-double? previousCelebrationDuration;
-double? previousInactivityTimeout;
-Color? previousInitialStartupColor;
-Color? previousSportEffectColor1;
-Color? previousSportEffectColor2;
-String? previousssid;
-String? previouspassword;
-
 // Color settings
 Color initialStartupColor = Colors.blue;
 Color sportEffectColor1 = const Color.fromARGB(255, 181,87,0);
