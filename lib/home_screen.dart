@@ -158,7 +158,7 @@ class HomeScreenState extends State<HomeScreen> {
     FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
     FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
-        String deviceName = r.device.platformName;
+        String deviceName = r.advertisementData.advName;
         if (deviceName.isNotEmpty) {
           logger.i("Found device: $deviceName");
           if (deviceName == "CornholeBT" && !isConnected) {
