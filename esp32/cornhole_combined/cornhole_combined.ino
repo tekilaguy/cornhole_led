@@ -21,8 +21,7 @@
 // Define Roles
 enum DeviceRole { MASTER, SLAVE };
 
-// Manually set the role here
-const bool isMaster = true;  // Set to 'false' for SLAVE
+String savedRole = "MASTER";
 
 DeviceRole deviceRole;
 
@@ -220,9 +219,13 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting setup...");
 
+  // Initialize Preferences
+  initializePreferences(); // Initialize preferences if not already done
+  defaultPreferences();
+  deviceRole = (savedRole == "MASTER") ? MASTER : SLAVE;
+
   // Assign Device Role
-  deviceRole = isMaster ? MASTER : SLAVE;
-  if (isMaster){
+  if (deviceRole == MASTER){
     peerMAC = slaveMAC;
     hostMAC = masterMAC;
   } else {
@@ -231,10 +234,6 @@ void setup() {
   }
 
   Serial.println(deviceRole == MASTER ? "Device Role: MASTER" : "Device Role: SLAVE");
-
-  // Initialize Preferences
-  initializePreferences(); // Initialize preferences if not already done
-  defaultPreferences();
 
   currentColor = initialColor;
 
@@ -323,6 +322,9 @@ void loop() {
 void initializePreferences() {
     preferences.begin("cornhole", false);
     if (!preferences.getBool("nvsInit", false)) {
+
+        preferences.putString("deviceRole", "MASTER");
+
         preferences.putString("ssid", "CornholeAP");
         preferences.putString("password", "Funforall");
         preferences.putString("board1Name", "Board 1");
@@ -354,6 +356,9 @@ void initializePreferences() {
 
 void defaultPreferences(){
   preferences.begin("cornhole", false);
+
+  savedRole = preferences.getString("deviceRole"); // Default MASTER if not set
+
   ssid = preferences.getString("ssid");
   password = preferences.getString("password");
   board1Name = preferences.getString("board1Name");
@@ -378,6 +383,7 @@ void defaultPreferences(){
   irTriggerDuration = preferences.getULong("irTriggerDuration", 4000);
   
   Serial.println("Preferences loaded into in-memory variables:");
+  Serial.println("Role: " + savedRole);
   Serial.println("SSID: " + ssid);
   Serial.println("Password: " + password);
   Serial.println("Board1 Name: " + board1Name);
@@ -820,6 +826,19 @@ void processCommand(String command) {
   } else if (command == "GET_INFO") {
     sendBoardInfo();
 
+  } else if (command.startsWith("SET_ROLE:")) {
+      String newRole = command.substring(9);
+      if (newRole == "MASTER" || newRole == "SLAVE") {
+          preferences.begin("cornhole", false);
+          preferences.putString("deviceRole", newRole);
+          preferences.end();
+          Serial.println("Role updated to: " + newRole);
+          sendData("app", "RoleUpdated", newRole);
+          sendRestartCommand();
+      } else {
+          Serial.println("Invalid role specified.");
+      }
+
   } else if (command.startsWith("UPDATE")) {
         // Handle OTA updates or other update commands
         // Example: startOtaUpdate(command.substring(7));
@@ -827,6 +846,9 @@ void processCommand(String command) {
   } else {
         Serial.println("Unknown command: " + command);
   }
+
+
+
   preferences.end();
 }
 
