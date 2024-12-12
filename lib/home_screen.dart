@@ -93,19 +93,24 @@ class HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> connectToDevice(BluetoothDevice device) async {
-    logger.i("Connecting to device: ${device.platformName}");
-    try {
-      await device.connect(autoConnect: false);
-      await device.requestMtu(240);
-      manageBluetoothState(device); // Consolidate state management
-    } catch (e) {
-      logger.e("Cannot connect, exception occurred: $e");
-      setState(() {
-        isConnected = false;
-      });
-    }
+Future<void> connectToDevice(BluetoothDevice device) async {
+  logger.i("Connecting to device: ${device.platformName}");
+  try {
+    await device.connect(autoConnect: false);
+    await device.requestMtu(240);
+    manageBluetoothState(device); // Consolidate state management
+
+    setState(() {
+      isConnected = true; // Update UI to reflect the connection
+      connectedDevice = device; // Save the connected device
+    });
+  } catch (e) {
+    logger.e("Cannot connect, exception occurred: $e");
+    setState(() {
+      isConnected = false; // Ensure UI reflects failed connection
+    });
   }
+}
 
   void attemptReconnection(BluetoothDevice device) {
     if (reconnectTimer?.isActive ?? false) reconnectTimer?.cancel();
@@ -158,7 +163,7 @@ class HomeScreenState extends State<HomeScreen> {
     FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
     FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
-        String deviceName = r.device.platformName;
+        String deviceName = r.advertisementData.advName;
         if (deviceName.isNotEmpty) {
           logger.i("Found device: $deviceName");
           if (deviceName == "CornholeBT" && !isConnected) {
