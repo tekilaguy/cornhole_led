@@ -91,7 +91,6 @@ class SetupScreenState extends State<SetupScreen> {
       previousSportEffectColor1 = widget.sportEffectColor1;
       previousSportEffectColor2 = widget.sportEffectColor2;
       previousInitialStartupColor = widget.initialStartupColor;
-      
 
       ssidController = TextEditingController(text: ssid);
       passwordController = TextEditingController(text: password);
@@ -179,28 +178,30 @@ class SetupScreenState extends State<SetupScreen> {
       int red = (initialStartupColor.value >> 16) & 0xFF;
       int green = (initialStartupColor.value >> 8) & 0xFF;
       int blue = (initialStartupColor.value) & 0xFF;
-      commands.add('INITIALCOLOR:$red,$green,$blue');
+      commands.add('IC:$red,$green,$blue');
     }
 
     if (sportEffectColor1 != previousSportEffectColor1) {
       int red = (sportEffectColor1.value >> 16) & 0xFF;
       int green = (sportEffectColor1.value >> 8) & 0xFF;
       int blue = (sportEffectColor1.value) & 0xFF;
-      commands.add('SPORTCOLOR1:$red,$green,$blue');
-    }
+      commands.add('SC1:$red,$green,$blue');
+      homeScreenState!.sendCommand('SC1:$red,$green,$blue');
+   }
 
     if (sportEffectColor2 != previousSportEffectColor2) {
       int red = (sportEffectColor2.value >> 16) & 0xFF;
       int green = (sportEffectColor2.value >> 8) & 0xFF;
       int blue = (sportEffectColor2.value) & 0xFF;
-      commands.add('SPORTCOLOR2:$red,$green,$blue');
+      commands.add('SC2:$red,$green,$blue');
+     homeScreenState!.sendCommand('SC2:$red,$green,$blue');
     }
     logger.i(
         "homeScreenState is ${homeScreenState != null ? 'not null' : 'null'}");
 
     if (commands.isNotEmpty && homeScreenState != null) {
       final batchCommand = '${commands.join(';')};';
-      widget.sendCommand(batchCommand);
+      homeScreenState!.sendCommand(batchCommand);
       previousNameBoard1 = currentNameBoard1;
       previousNameBoard2 = currentNameBoard2;
       previousInitialBrightness = currentInitialBrightness;
@@ -254,12 +255,110 @@ class SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  void clearSavedVariables() {
-    if (homeScreenState != null) {
-      homeScreenState!.sendCommand('CLEAR_ALL;');
-      logger.i("Sent command to clear all saved variables on both boards.");
-    } else {
-      logger.e("HomeScreenState is null, cannot send commands");
+  void changeRoles() async {
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Are you sure?"),
+          content: const Text("This will change the roles on both boards."),
+          actions: [
+            TextButton(
+              child: const Text("Cancel"),
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+            ),
+            TextButton(
+              child: const Text("Confirm"),
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      if (homeScreenState != null) {
+        homeScreenState!.sendCommand('SET_ROLE:SLAVE;');
+        logger.i("Sent command to change roles on both boards.");
+      } else {
+        logger.e("HomeScreenState is null, cannot send commands");
+      }
+    }
+  }
+
+  void resetConfig() async {
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Are you sure?"),
+          content:
+              const Text("This will clear all saved variables on both boards."),
+          actions: [
+            TextButton(
+              child: const Text("Cancel"),
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+            ),
+            TextButton(
+              child: const Text("Confirm"),
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      if (homeScreenState != null) {
+        homeScreenState!.sendCommand('RESET_CONFIG;');
+        logger.i("Sent command to reset configuration on both boards.");
+      } else {
+        logger.e("HomeScreenState is null, cannot send commands");
+      }
+    }
+  }
+
+  void clearSavedVariables() async {
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Are you sure?"),
+          content: const Text(
+              "This will clear all saved variables and roles on both boards."),
+          actions: [
+            TextButton(
+              child: const Text("Cancel"),
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+            ),
+            TextButton(
+              child: const Text("Confirm"),
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      if (homeScreenState != null) {
+        homeScreenState!.sendCommand('CLEAR_ALL;');
+        logger.i("Sent command to clear all saved variables on both boards.");
+      } else {
+        logger.e("HomeScreenState is null, cannot send commands");
+      }
     }
   }
 
@@ -328,8 +427,98 @@ class SetupScreenState extends State<SetupScreen> {
         Section(
           title: 'Clear all settings',
           content: Wrap(
-            children: [buildClearSettingsContainer()],
+            children: [buildControlButtons()],
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildControlButtons() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        Column(
+          children: [
+            const Text(
+              'Roles',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
+            ElevatedButton(
+              onPressed: changeRoles,
+              child: const Icon(Icons.system_update_alt, size: 30),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                elevation: 25,
+                shadowColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50),
+                  side: const BorderSide(color: Colors.black, width: .5),
+                ),
+                padding: const EdgeInsets.all(20),
+              ),
+            ),
+          ],
+        ),
+        Column(
+          children: [
+            const Text(
+              'Reset',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
+            ElevatedButton(
+              onPressed: resetConfig,
+              child: const Icon(Icons.power_settings_new,
+                  size: 30, color: Colors.black),
+              style: ElevatedButton.styleFrom(
+                elevation: 25,
+                shadowColor: Colors.black,
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50),
+                  side: const BorderSide(color: Colors.black, width: .5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        Column(
+          children: [
+            const Text(
+              'Factory',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
+            ElevatedButton(
+              onPressed: clearSavedVariables,
+              child: const Icon(Icons.power_settings_new,
+                  size: 30, color: Colors.black),
+              style: ElevatedButton.styleFrom(
+                elevation: 25,
+                shadowColor: Colors.black,
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50),
+                  side: const BorderSide(color: Colors.black, width: .5),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -506,45 +695,134 @@ class SetupScreenState extends State<SetupScreen> {
   }
 
   Widget buildClearSettingsContainer() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        const SizedBox(height: 20),
-        Align(
-          alignment: Alignment.bottomRight,
-          child: ElevatedButton(
-            onPressed: () async {
-              bool? confirmed = await showDialog<bool>(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: const Text("Are you sure?"),
-                    content: const Text(
-                        "This will clear all saved variables on both boards."),
-                    actions: [
-                      TextButton(
-                        child: const Text("Cancel"),
-                        onPressed: () {
-                          Navigator.of(context).pop(false);
-                        },
-                      ),
-                      TextButton(
-                        child: const Text("Confirm"),
-                        onPressed: () {
-                          Navigator.of(context).pop(true);
-                        },
-                      ),
-                    ],
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: ElevatedButton(
+                onPressed: () async {
+                  bool? confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text("Are you sure?"),
+                        content: const Text(
+                            "This will clear all saved variables on both boards."),
+                        actions: [
+                          TextButton(
+                            child: const Text("Cancel"),
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                          ),
+                          TextButton(
+                            child: const Text("Confirm"),
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   );
-                },
-              );
 
-              if (confirmed == true) {
-                clearSavedVariables();
-              }
-            },
-            child: const Text("Clear Settings"),
-          ),
+                  if (confirmed == true) {
+                    resetConfig();
+                  }
+                },
+                child: const Text("Reset Config"),
+              ),
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: ElevatedButton(
+                onPressed: () async {
+                  bool? confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text("Are you sure?"),
+                        content: const Text(
+                            "This will change the roles on both boards."),
+                        actions: [
+                          TextButton(
+                            child: const Text("Cancel"),
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                          ),
+                          TextButton(
+                            child: const Text("Confirm"),
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (confirmed == true) {
+                    changeRoles();
+                  }
+                },
+                child: const Text("Change Roles"),
+              ),
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: ElevatedButton(
+                onPressed: () async {
+                  bool? confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text("Are you sure?"),
+                        content: const Text(
+                            "This will clear all saved variables and roles on both boards."),
+                        actions: [
+                          TextButton(
+                            child: const Text("Cancel"),
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                          ),
+                          TextButton(
+                            child: const Text("Confirm"),
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (confirmed == true) {
+                    clearSavedVariables();
+                  }
+                },
+                child: const Text("Factory Reset"),
+              ),
+            ),
+          ],
         ),
       ],
     );

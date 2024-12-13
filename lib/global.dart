@@ -30,6 +30,7 @@ String connectionInfo = '';
 int brightness = 50;
 
 // Variables for Board 1
+String boardRole1 = '';
 String nameBoard1 = '';
 String macAddrBoard1 = '';
 String ipAddrBoard1 = '';
@@ -37,6 +38,7 @@ int batteryVoltageBoard1 = 0;
 int batteryLevelBoard1 = 0;
 
 // Variables for Board 2
+String boardRole2 = '';
 String nameBoard2 = '';
 String macAddrBoard2 = '';
 String ipAddrBoard2 = '';
@@ -59,10 +61,10 @@ double inactivityTimeout = 10;
 
 // Color settings
 Color initialStartupColor = Colors.blue;
-Color sportEffectColor1 = const Color.fromARGB(255, 181,87,0);
+Color sportEffectColor1 = const Color.fromARGB(255, 181, 87, 0);
 Color sportEffectColor2 = Colors.white;
-Color sportEffectColor3 = const Color.fromARGB(255, 241,90,34);
-Color sportEffectColor4 = const Color.fromARGB(255, 12,35,64);
+Color sportEffectColor3 = const Color.fromARGB(255, 241, 90, 34);
+Color sportEffectColor4 = const Color.fromARGB(255, 12, 35, 64);
 
 // Screen state references
 HomeScreenState? homeScreenState;

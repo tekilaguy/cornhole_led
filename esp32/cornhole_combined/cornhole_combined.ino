@@ -21,8 +21,6 @@
 // Define Roles
 enum DeviceRole { MASTER, SLAVE };
 
-String savedRole = "MASTER";
-
 DeviceRole deviceRole;
 
 // MAC Addresses
@@ -37,7 +35,7 @@ uint8_t *hostMAC;
 uint8_t *peerMAC;
 
 // Web Server (only for MASTER)
-AsyncWebServer server(80);
+AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
 #define RING_LED_PIN    32
@@ -71,6 +69,7 @@ String ssid = "CornholeAP";
 String password = "Funforall";
 
 // Board LED Setup
+String savedRole;
 String board1Name = "Board 1";
 String board2Name = "Board 2";
 int brightness = 25;
@@ -156,10 +155,13 @@ int previousBrightness;
 
 // ---------------------- Function Declarations ----------------------
 void setupWiFi();
+void printMacAddress();
 void setupEspNow();
 void setupBT();
 void setupOta();
 void setupWebServer();
+void initializePreferences();
+void defaultPreferences();
 void handleBluetoothData(String data);
 void updateBluetoothData(String data);
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len);
@@ -184,6 +186,7 @@ int getEffectIndex(String effect);
 void powerOnEffect();
 float readBatteryVoltage();
 int readBatteryLevel();
+void processCommand(String command);
 
 // Callback class for handling BLE connection events
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -267,11 +270,11 @@ void setup() {
   button.attachLongPressStop(longPressStop);
   ledEffects.powerOnEffect();
 
-  // Initialize board2 structure
-  strcpy(board2.device, "Board 2");
-  strcpy(board2.name, board2Name.c_str());
-  memcpy(board2.macAddr, broadcastMAC, 6); // Set to broadcast MAC
-  strcpy(board2.ipAddr, WiFi.localIP().toString().c_str());
+  // // Initialize board2 structure
+  // strcpy(board2.device, "Board 2");
+  // strcpy(board2.name, board2Name.c_str());
+  // memcpy(board2.macAddr, broadcastMAC, 6); // Set to broadcast MAC
+  // strcpy(board2.ipAddr, WiFi.localIP().toString().c_str());
 
   Serial.println("Setup completed.");
 }
@@ -660,10 +663,14 @@ void handleBluetoothData(String command) {
     String completeCommand = accumulatedData.substring(0, endIndex);
     
     // Process the complete command
-    processCommand(completeCommand);
-    esp_err_t result = esp_now_send(peerMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
-    //sendData("espNow", completeCommand, "");
     Serial.println("Received full data: " + completeCommand);
+    processCommand(completeCommand);
+    if (completeCommand.startsWith("SET_ROLE:SLAVE")) {
+    
+    } else {
+        esp_err_t result = esp_now_send(peerMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
+    }
+    //sendData("espNow", completeCommand, "");
 
     // Remove the processed command from accumulated data
     accumulatedData = accumulatedData.substring(endIndex + 1);
@@ -681,6 +688,10 @@ void processCommand(String command) {
     esp_err_t result = esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
     Serial.println("All saved variables cleared.");
     delay(3000);
+    preferences.begin("cornhole", false);
+    preferences.clear();
+    preferences.putBool("nvsInit", false);
+    preferences.end();
     sendRestartCommand();
     lastEspNowMessage = "";
     lastAppMessage = "";
@@ -699,9 +710,9 @@ void processCommand(String command) {
       preferences.putString("password", password);
       Serial.println("Password updated.");
 
-  } else if (command.startsWith("INITIALCOLOR:")) {
+  } else if (command.startsWith("IC:")) {
       int r, g, b;
-      sscanf(command.c_str(), "INITIALCOLOR:%d,%d,%d", &r, &g, &b);
+      sscanf(command.c_str(), "IC:%d,%d,%d", &r, &g, &b);
       initialColor = CRGB(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
       preferences.putInt("initialColorR", r);
       preferences.putInt("initialColorG", g);
@@ -710,9 +721,9 @@ void processCommand(String command) {
       ledEffects.setInitialColor(initialColor);
       Serial.println("Initial color updated.");
 
-  } else if (command.startsWith("SPORTCOLOR1:")) {
+  } else if (command.startsWith("SC1:")) {
       int r, g, b;
-      sscanf(command.c_str(), "SPORTCOLOR1:%d,%d,%d", &r, &g, &b);
+      sscanf(command.c_str(), "SC1:%d,%d,%d", &r, &g, &b);
       CRGB newColor1 = CRGB(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
       preferences.putInt("sportsColor1R", r);
       preferences.putInt("sportsColor1G", g);
@@ -720,9 +731,9 @@ void processCommand(String command) {
       ledEffects.setSportsEffectColors(newColor1, sportsEffectColor2);
       Serial.println("Sports Effect Color1 updated.");
 
-  } else if (command.startsWith("SPORTCOLOR2:")) {
+  } else if (command.startsWith("SC2:")) {
     int r, g, b;
-    sscanf(command.c_str(), "SPORTCOLOR2:%d,%d,%d", &r, &g, &b);
+    sscanf(command.c_str(), "SC2:%d,%d,%d", &r, &g, &b);
     CRGB newColor2 = CRGB(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
     preferences.putInt("sportsColor2R", r);
     preferences.putInt("sportsColor2G", g);
@@ -787,9 +798,6 @@ void processCommand(String command) {
           sendData("app", "ColorIndex", String(colorIndex));
       }
 
-      // Set effect to "Solid" to maintain the color
-      // effectIndex = getEffectIndex("Solid");
-      // Serial.println("EffectIndex set to Solid");
   } else {
       Serial.println("Invalid color index");
   } 
@@ -826,29 +834,40 @@ void processCommand(String command) {
   } else if (command == "GET_INFO") {
     sendBoardInfo();
 
-  } else if (command.startsWith("SET_ROLE:")) {
+  } else if (command.startsWith("SET_ROLE:SLAVE")) {
       String newRole = command.substring(9);
-      if (newRole == "MASTER" || newRole == "SLAVE") {
-          preferences.begin("cornhole", false);
-          preferences.putString("deviceRole", newRole);
-          preferences.end();
-          Serial.println("Role updated to: " + newRole);
-          sendData("app", "RoleUpdated", newRole);
-          sendRestartCommand();
-      } else {
-          Serial.println("Invalid role specified.");
-      }
-
+      Serial.println("newRole extracted: " + newRole);
+      preferences.begin("cornhole", false);
+      preferences.putString("deviceRole", "SLAVE");
+      Serial.println("Wrote deviceRole: " + newRole);
+      preferences.end();
+      Serial.println("Role updated to: " + newRole);
+      String currentMessage = "SET_ROLE:MASTER";
+      esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
+      delay(10000);
+      ESP.restart();
+  
+ } else if (command.startsWith("SET_ROLE:MASTER")) {
+      String newRole = command.substring(9);
+      preferences.begin("cornhole", false);
+      preferences.putString("deviceRole", "MASTER");
+      Serial.println("Wrote deviceRole: " + newRole);
+      preferences.end();
+      Serial.println("Role updated to: " + newRole);
+      delay(10000);
+      ESP.restart();
+ 
   } else if (command.startsWith("UPDATE")) {
         // Handle OTA updates or other update commands
         // Example: startOtaUpdate(command.substring(7));
         Serial.println("Update command received.");
+
+  } else if (command.startsWith("r2:")) {
+      Serial.println("Sending SLAVE info to App.");
+
   } else {
         Serial.println("Unknown command: " + command);
   }
-
-
-
   preferences.end();
 }
 
@@ -864,7 +883,8 @@ void sendBoardInfo() {
   char data[256];
 
   if (deviceRole == MASTER) {
-  sprintf(data, "n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d",
+  sprintf(data, "r1:%s;n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d",
+            "MASTER",
             board1Name.c_str(),
             deviceMAC[0], deviceMAC[1], deviceMAC[2],
             deviceMAC[3], deviceMAC[4], deviceMAC[5],
@@ -875,14 +895,15 @@ void sendBoardInfo() {
   Serial.print("Sending Board info to app: ");
   Serial.println(data);
   } else {
-  sprintf(data, "n2:%s;m2:%02x:%02x:%02x:%02x:%02x:%02x;i2:%s;l2:%d;v2:%d;",
+  sprintf(data, "r2:%s;n2:%s;m2:%02x:%02x:%02x:%02x:%02x:%02x;i2:%s;l2:%d;v2:%d",
+            "SLAVE",
             board2Name.c_str(),
             deviceMAC[0], deviceMAC[1], deviceMAC[2],
             deviceMAC[3], deviceMAC[4], deviceMAC[5],
             ipAddress.c_str(),
             readBatteryLevel(),
             (int)readBatteryVoltage());
-   esp_err_t result = esp_now_send(peerMAC, (uint8_t *)data, strlen(data));
+  esp_err_t result = esp_now_send(peerMAC, (uint8_t *)data, strlen(data));
   Serial.print("Sending Board info to ESP-NOW: ");
   Serial.println(data);
   }
@@ -1087,6 +1108,7 @@ void toggleWiFi(bool status) {
   if (wifiEnabled) {
     Serial.println("WiFi enabled");
     setupWiFi();
+    setupEspNow();
   } else {
     Serial.println("WiFi disabled");
     WiFi.disconnect();

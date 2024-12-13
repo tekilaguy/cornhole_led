@@ -291,6 +291,16 @@ Future<void> connectToDevice(BluetoothDevice device) async {
 
           // Handle the parsed field tag and value for each board
           switch (fieldTag) {
+            case 'r':
+              if (boardNumber == 1) {
+                boardRole1 = fieldValue;
+                logger.i("Board 1 Role set to: $boardRole1");
+              } else if (boardNumber == 2) {
+                boardRole2 = fieldValue;
+                logger.i("Board 2 Role set to: $boardRole2");
+              }
+              break;
+
             case 'n':
               if (boardNumber == 1) {
                 nameBoard1 = fieldValue;
@@ -378,6 +388,12 @@ Future<void> connectToDevice(BluetoothDevice device) async {
       } else if (setting.startsWith("PW:")) {
         password = setting.substring(3);
         logger.i("Password set to: $password");
+      } else if (setting.startsWith("R1:")) {
+        boardRole1 = setting.substring(3);
+        logger.i("Board 1 Name set to: $boardRole1");
+      } else if (setting.startsWith("R2:")) {
+        boardRole2 = setting.substring(3);
+        logger.i("Board 2 Name set to: $boardRole2");
       } else if (setting.startsWith("B1:")) {
         nameBoard1 = setting.substring(3);
         logger.i("Board 1 Name set to: $nameBoard1");
@@ -502,11 +518,13 @@ Future<void> connectToDevice(BluetoothDevice device) async {
       'espNowEnabled': espNowEnabled,
       'isConnected': isConnected,
       'connectionInfo': connectionInfo,
+      'boardRole1': boardRole1,
       'nameBoard1': nameBoard1,
       'macAddrBoard1': macAddrBoard1,
       'ipAddrBoard1': ipAddrBoard1,
       'batteryLevelBoard1': batteryLevelBoard1,
       'batteryVoltageBoard1': batteryVoltageBoard1,
+      'boardRole2': boardRole2,
       'nameBoard2': nameBoard2,
       'macAddrBoard2': macAddrBoard2,
       'ipAddrBoard2': ipAddrBoard2,
@@ -531,6 +549,8 @@ Future<void> connectToDevice(BluetoothDevice device) async {
       arguments: {
         'ssid': ssid,
         'password': password,
+        'boardRole1': boardRole1,
+        'boardRole2': boardRole2,
         'nameBoard1': nameBoard1,
         'nameBoard2': nameBoard2,
         'initialBrightness': initialBrightness,
