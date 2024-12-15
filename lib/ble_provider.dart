@@ -20,11 +20,85 @@ class BLEProvider with ChangeNotifier {
   StreamSubscription? adapterStateSubscription;
   StreamSubscription? scanResultsSubscription;
   StreamSubscription? connectionStateSubscription;
-  bool isConnected = false;
   Timer? reconnectTimer;
   static const reconnectDuration = Duration(seconds: 30);
 
-  // Helper function
+  bool _isConnected = false;
+  bool _wifiEnabled = true;
+  bool _lightsOn = true;
+  bool _espNowEnabled = true;
+  Color _initialStartupColor = Colors.blue;
+
+  bool get isConnected => _isConnected;
+  bool get wifiEnabled => _wifiEnabled;
+  bool get lightsOn => _lightsOn;
+  bool get espNowEnabled => _espNowEnabled;
+  Color get initialStartupColor => _initialStartupColor;
+
+  // Board 1
+  String _boardRole1 = '';
+  String _nameBoard1 = '';
+  String _macAddrBoard1 = '';
+  String _ipAddrBoard1 = '';
+  int _batteryVoltageBoard1 = 0;
+  int _batteryLevelBoard1 = 0;
+
+  // Board 2
+  String _boardRole2 = '';
+  String _nameBoard2 = '';
+  String _macAddrBoard2 = '';
+  String _ipAddrBoard2 = '';
+  int _batteryVoltageBoard2 = 0;
+  int _batteryLevelBoard2 = 0;
+
+  // Wi-Fi Credentials
+  String _ssid = 'CornholeAP';
+  String _password = 'Funforall';
+
+  // Getters
+  String get boardRole1 => _boardRole1;
+  String get nameBoard1 => _nameBoard1;
+  String get macAddrBoard1 => _macAddrBoard1;
+  String get ipAddrBoard1 => _ipAddrBoard1;
+  int get batteryVoltageBoard1 => _batteryVoltageBoard1;
+  int get batteryLevelBoard1 => _batteryLevelBoard1;
+
+  String get boardRole2 => _boardRole2;
+  String get nameBoard2 => _nameBoard2;
+  String get macAddrBoard2 => _macAddrBoard2;
+  String get ipAddrBoard2 => _ipAddrBoard2;
+  int get batteryVoltageBoard2 => _batteryVoltageBoard2;
+  int get batteryLevelBoard2 => _batteryLevelBoard2;
+
+  String get ssid => _ssid;
+  String get password => _password;
+
+  void setConnected(bool value) {
+    _isConnected = value;
+    notifyListeners();
+  }
+
+  void setWifiEnabled(bool value) {
+    _wifiEnabled = value;
+    notifyListeners();
+  }
+
+  void setLightsOn(bool value) {
+    _lightsOn = value;
+    notifyListeners();
+  }
+
+  void setEspNowEnabled(bool value) {
+    _espNowEnabled = value;
+    notifyListeners();
+  }
+
+  void setInitialStartupColor(Color color) {
+    _initialStartupColor = color;
+    notifyListeners();
+  }
+
+// Helper function
   int getColorIndexFromRGB(int r, int g, int b) {
     // Implement this function based on your app's logic
     return 0; // Placeholder
@@ -63,7 +137,7 @@ class BLEProvider with ChangeNotifier {
       if (state == BluetoothConnectionState.connected) {
         logger.i("Device connected: ${device.platformName}");
 
-        isConnected = true;
+        _isConnected = true;
         connectedDevice = device;
 
         discoverServices(device);
@@ -85,7 +159,7 @@ class BLEProvider with ChangeNotifier {
       manageBluetoothState(device); // Consolidate state management
     } catch (e) {
       logger.e("Cannot connect, exception occurred: $e");
-      isConnected = false;
+      _isConnected = false;
       notifyListeners();
     }
   }
@@ -113,7 +187,7 @@ class BLEProvider with ChangeNotifier {
   }
 
   void updateConnectionState(bool state, [BluetoothDevice? device]) {
-    isConnected = state;
+    _isConnected = state;
     connectedDevice = device;
     notifyListeners();
   }
@@ -167,7 +241,7 @@ class BLEProvider with ChangeNotifier {
   void disconnectDevice() async {
     if (connectedDevice != null) {
       await connectedDevice!.disconnect();
-      isConnected = false;
+      _isConnected = false;
       notifyListeners();
     }
   }
@@ -249,30 +323,30 @@ class BLEProvider with ChangeNotifier {
         switch (fieldTag) {
           case 'n':
             if (boardNumber == 1) {
-              nameBoard1 = fieldValue;
+              _nameBoard1 = fieldValue;
               logger.i("Board 1 Name set to: $nameBoard1");
             } else if (boardNumber == 2) {
-              nameBoard2 = fieldValue;
+              _nameBoard2 = fieldValue;
               logger.i("Board 2 Name set to: $nameBoard2");
             }
             break;
 
           case 'm':
             if (boardNumber == 1) {
-              macAddrBoard1 = fieldValue;
+              _macAddrBoard1 = fieldValue;
               logger.i("MAC Addr Board 1 set to: $macAddrBoard1");
             } else if (boardNumber == 2) {
-              macAddrBoard2 = fieldValue;
+              _macAddrBoard2 = fieldValue;
               logger.i("MAC Addr Board 2 set to: $macAddrBoard2");
             }
             break;
 
           case 'i':
             if (boardNumber == 1) {
-              ipAddrBoard1 = fieldValue;
+              _ipAddrBoard1 = fieldValue;
               logger.i("IP Addr Board 1 set to: $ipAddrBoard1");
             } else if (boardNumber == 2) {
-              ipAddrBoard2 = fieldValue;
+              _ipAddrBoard2 = fieldValue;
               logger.i("IP Addr Board 2 set to: $ipAddrBoard2");
             }
             break;
@@ -280,10 +354,10 @@ class BLEProvider with ChangeNotifier {
           case 'l':
             int batteryLevel = int.tryParse(fieldValue) ?? 0;
             if (boardNumber == 1) {
-              batteryLevelBoard1 = batteryLevel;
+              _batteryLevelBoard1 = batteryLevel;
               logger.i("Battery Level Board 1 set to: $batteryLevelBoard1%");
             } else if (boardNumber == 2) {
-              batteryLevelBoard2 = batteryLevel;
+              _batteryLevelBoard2 = batteryLevel;
               logger.i("Battery Level Board 2 set to: $batteryLevelBoard2%");
             }
             break;
@@ -291,11 +365,11 @@ class BLEProvider with ChangeNotifier {
           case 'v':
             int batteryVoltage = int.tryParse(fieldValue) ?? 0;
             if (boardNumber == 1) {
-              batteryVoltageBoard1 = batteryVoltage;
+              _batteryVoltageBoard1 = batteryVoltage;
               logger
                   .i("Battery Voltage Board 1 set to: $batteryVoltageBoard1 V");
             } else if (boardNumber == 2) {
-              batteryVoltageBoard2 = batteryVoltage;
+              _batteryVoltageBoard2 = batteryVoltage;
               logger
                   .i("Battery Voltage Board 2 set to: $batteryVoltageBoard2 V");
             }
@@ -325,16 +399,16 @@ class BLEProvider with ChangeNotifier {
 
       // Handle each setting based on its prefix
       if (setting.startsWith("SSID:")) {
-        ssid = setting.substring(5);
+        _ssid = setting.substring(5);
         logger.i("SSID set to: $ssid");
       } else if (setting.startsWith("PW:")) {
-        password = setting.substring(3);
+        _password = setting.substring(3);
         logger.i("Password set to: $password");
       } else if (setting.startsWith("B1:")) {
-        nameBoard1 = setting.substring(3);
+        _nameBoard1 = setting.substring(3);
         logger.i("Board 1 Name set to: $nameBoard1");
       } else if (setting.startsWith("B2:")) {
-        nameBoard2 = setting.substring(3);
+        _nameBoard2 = setting.substring(3);
         logger.i("Board 2 Name set to: $nameBoard2");
       } else if (setting.startsWith("BRIGHT:")) {
         initialBrightness =
@@ -416,21 +490,21 @@ class BLEProvider with ChangeNotifier {
   }
 
   void toggleWiFi() {
-    wifiEnabled = !wifiEnabled;
+    _wifiEnabled = !wifiEnabled;
     logger.i("WiFi toggled: ${wifiEnabled ? 'on' : 'off'}");
     sendCommand('toggleWiFi:${wifiEnabled ? 'on' : 'off'};');
     notifyListeners();
   }
 
   void toggleLights() {
-    lightsOn = !lightsOn;
+    _lightsOn = !lightsOn;
     logger.i("Lights toggled: ${lightsOn ? 'on' : 'off'}");
     sendCommand('toggleLights:${lightsOn ? 'on' : 'off'};');
     notifyListeners();
   }
 
   void toggleEspNow() {
-    espNowEnabled = !espNowEnabled;
+    _espNowEnabled = !espNowEnabled;
     logger.i("ESP-NOW toggled: ${espNowEnabled ? 'on' : 'off'}");
     sendCommand('toggleEspNow:${espNowEnabled ? 'on' : 'off'};');
     notifyListeners();
@@ -438,5 +512,78 @@ class BLEProvider with ChangeNotifier {
 
   void sendRestart() {
     sendCommand('sendRestart;');
+  }
+
+// Setters for Board 1
+  void setBoardRole1(String value) {
+    _boardRole1 = value;
+    notifyListeners();
+  }
+
+  void setNameBoard1(String value) {
+    _nameBoard1 = value;
+    notifyListeners();
+  }
+
+  void setMacAddrBoard1(String value) {
+    _macAddrBoard1 = value;
+    notifyListeners();
+  }
+
+  void setIpAddrBoard1(String value) {
+    _ipAddrBoard1 = value;
+    notifyListeners();
+  }
+
+  void setBatteryVoltageBoard1(int value) {
+    _batteryVoltageBoard1 = value;
+    notifyListeners();
+  }
+
+  void setBatteryLevelBoard1(int value) {
+    _batteryLevelBoard1 = value;
+    notifyListeners();
+  }
+
+  // Setters for Board 2
+  void setBoardRole2(String value) {
+    _boardRole2 = value;
+    notifyListeners();
+  }
+
+  void setNameBoard2(String value) {
+    _nameBoard2 = value;
+    notifyListeners();
+  }
+
+  void setMacAddrBoard2(String value) {
+    _macAddrBoard2 = value;
+    notifyListeners();
+  }
+
+  void setIpAddrBoard2(String value) {
+    _ipAddrBoard2 = value;
+    notifyListeners();
+  }
+
+  void setBatteryVoltageBoard2(int value) {
+    _batteryVoltageBoard2 = value;
+    notifyListeners();
+  }
+
+  void setBatteryLevelBoard2(int value) {
+    _batteryLevelBoard2 = value;
+    notifyListeners();
+  }
+
+  // Setters for Wi-Fi Credentials
+  void setSsid(String newSsid) {
+    _ssid = newSsid;
+    notifyListeners();
+  }
+
+  void setPassword(String newPassword) {
+    _password = newPassword;
+    notifyListeners();
   }
 }

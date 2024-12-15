@@ -1,10 +1,10 @@
 // main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'home_screen.dart';
-import 'info_screen.dart';
-import 'setup_screen.dart';
-import 'ota_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/info_screen.dart';
+import 'screens/setup_screen.dart';
+import 'screens/ota_screen.dart';
 import 'ble_provider.dart';
 
 void main() {

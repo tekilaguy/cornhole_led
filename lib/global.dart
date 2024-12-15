@@ -1,10 +1,10 @@
 // global.dart
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'home_screen.dart';
-import 'info_screen.dart';
-import 'setup_screen.dart';
-import 'ota_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/info_screen.dart';
+import 'screens/setup_screen.dart';
+import 'screens/ota_screen.dart';
 
 // Logger instance
 Logger logger = Logger();
