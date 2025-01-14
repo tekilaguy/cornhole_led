@@ -51,8 +51,8 @@ CRGB ringLeds[NUM_LEDS_RING];
 CRGB boardLeds[NUM_LEDS_BOARD];
 
 // ---------------------- Button and Sensors ----------------------
-#define BUTTON_PIN 14
-#define SENSOR_PIN 12
+#define BUTTON_PIN 12
+#define SENSOR_PIN 14
 #define BATTERY_PIN 35
 
 // Button Setup
