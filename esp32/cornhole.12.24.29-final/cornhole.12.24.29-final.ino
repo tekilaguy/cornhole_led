@@ -38,8 +38,8 @@ uint8_t *peerMAC;
 AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
-#define RING_LED_PIN    2  //GIO32 for ESP32
-#define BOARD_LED_PIN   4  //GIO34 for ESP32
+#define RING_LED_PIN    32
+#define BOARD_LED_PIN   33
 #define NUM_LEDS_RING   60
 #define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
@@ -59,9 +59,7 @@ CRGB boardLeds[NUM_LEDS_BOARD];
 OneButton button(BUTTON_PIN, true);
 
 // IR Trigger variables
-static bool effectRunning = false;
 bool irTriggered = false;
-unsigned long irTriggerDuration = 3000;
 
 // ---------------------- Configurable Variables ----------------------
 Preferences preferences;
@@ -78,6 +76,7 @@ int brightness = 25;
 unsigned long blockSize = 10;
 unsigned long effectSpeed = 25;
 int inactivityTimeout = 30;
+unsigned long irTriggerDuration = 4000;
 unsigned long lastActivityTime = 0;
 
 // Color Definitions
@@ -232,9 +231,11 @@ void setup() {
   if (deviceRole == MASTER){
     peerMAC = slaveMAC;
     hostMAC = masterMAC;
+    initialColor = CRGB::Blue;
   } else {
     peerMAC = masterMAC;
     hostMAC = slaveMAC;
+    initialColor = CRGB::Red;
   }
 
   Serial.println(deviceRole == MASTER ? "Device Role: MASTER" : "Device Role: SLAVE");
@@ -271,6 +272,12 @@ void setup() {
   button.attachLongPressStop(longPressStop);
   ledEffects.powerOnEffect();
 
+  // // Initialize board2 structure
+  // strcpy(board2.device, "Board 2");
+  // strcpy(board2.name, board2Name.c_str());
+  // memcpy(board2.macAddr, broadcastMAC, 6); // Set to broadcast MAC
+  // strcpy(board2.ipAddr, WiFi.localIP().toString().c_str());
+
   Serial.println("Setup completed.");
 }
 
@@ -306,13 +313,8 @@ void loop() {
   }
 
   // Apply effect at defined intervals
-  if (lightsOn && !effectRunning) {
+  if (lightsOn) {
     ledEffects.applyEffect(effects[effectIndex]);
-  }
-
-  // Handle the celebration effect while it is active
-  if (effectRunning) {
-    ledEffects.celebrationEffect();
   }
   
   // Handle OTA updates (MASTER only)
@@ -439,7 +441,7 @@ void setupWiFi() {
       }
     } else {
             while (WiFi.status() != WL_CONNECTED) {
-            delay(500);
+            delay(1000);
             Serial.print(".");
         // No need to call WiFi.begin() again here
       }
@@ -484,8 +486,6 @@ void setupEspNow() {
   }
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
   } else {
-    sendData("espNow", "ColorIndex", String(colorIndex));
-    sendData("espNow","Effect",effects[effectIndex]);
      Serial.println("Peer added successfully");
   }
 }
@@ -689,7 +689,7 @@ void processCommand(String command) {
     const char* message = "CLEAR_ALL";
     esp_err_t result = esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
     Serial.println("All saved variables cleared.");
-    delay(500);
+    delay(3000);
     preferences.begin("cornhole", false);
     preferences.clear();
     preferences.putBool("nvsInit", false);
@@ -788,6 +788,9 @@ void processCommand(String command) {
         effectIndex = getEffectIndex(effect); // Set the effect index based on received effect
         ledEffects.applyEffect(effect);
         Serial.println("Effect set to: " + effects[effectIndex]);
+        if (deviceRole == MASTER) {
+          sendData("app","Effect",effects[effectIndex]);
+        }
 
   } else if (command.startsWith("ColorIndex:")) {
        int index = command.substring(11).toInt();
@@ -828,16 +831,13 @@ void processCommand(String command) {
 
   } else if (command.startsWith("Restart")) {
         sendRestartCommand();
-        return;
 
   } else if (command.startsWith("GET_SETTINGS")) {
         sendSettings();
         Serial.println("Settings sent.");
-        return;
 
   } else if (command == "GET_INFO") {
     sendBoardInfo();
-    return;
 
   } else if (command.startsWith("SET_ROLE:SLAVE")) {
       String newRole = command.substring(9);
@@ -849,7 +849,7 @@ void processCommand(String command) {
       Serial.println("Role updated to: " + newRole);
       String currentMessage = "SET_ROLE:MASTER";
       esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
-      delay(500);
+      delay(10000);
       ESP.restart();
   
  } else if (command.startsWith("SET_ROLE:MASTER")) {
@@ -859,7 +859,7 @@ void processCommand(String command) {
       Serial.println("Wrote deviceRole: " + newRole);
       preferences.end();
       Serial.println("Role updated to: " + newRole);
-      delay(500);
+      delay(10000);
       ESP.restart();
  
   } else if (command.startsWith("UPDATE")) {
@@ -880,7 +880,7 @@ void sendRestartCommand() {
   const char* message = "Restart";
   esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
   Serial.println("Restart command sent successfully.");
-  delay(500);
+  delay(10000);
   ESP.restart();
 }
 
@@ -896,7 +896,7 @@ void sendBoardInfo() {
             ipAddress.c_str(),
             readBatteryLevel(),
             (int)readBatteryVoltage());
-  sendData("app", data, "");
+  updateBluetoothData(data);
   Serial.print("Sending Board info to app: ");
   Serial.println(data);
   } else {
@@ -1147,30 +1147,28 @@ void btPairing(){
     delay(1000);
     sendData("app", "ColorIndex", String(colorIndex));
     sendData("app","Effect",effects[effectIndex]);
-    sendData("espNow", "ColorIndex", String(colorIndex));
-    sendData("espNow","Effect",effects[effectIndex]);
     Serial.println("Bluetooth Device paired successfully");
   }
 }
 
 void handleIRSensor() {
   int reading = digitalRead(SENSOR_PIN);
+  static bool effectRunning = false;
   static unsigned long effectStartTime = 0;
   const unsigned long effectDuration = irTriggerDuration;
 
-  // Start the effect if IR is triggered and not already running
   if (reading == LOW && !effectRunning) {
     effectStartTime = millis();
     effectRunning = true;
     irTriggered = true;
+    ledEffects.celebrationEffect();
     Serial.println("IR Sensor Triggered: Celebration Effect Started");
   }
 
-  // Stop the effect once the duration has elapsed
   if (effectRunning && (millis() - effectStartTime >= effectDuration)) {
     effectRunning = false;
     irTriggered = false;
-    ledEffects.setColor(currentColor); // Reset to currentColor after effect
+    ledEffects.setColor(currentColor);
     Serial.println("IR Sensor Triggered: Celebration Effect Ended");
   }
 }
