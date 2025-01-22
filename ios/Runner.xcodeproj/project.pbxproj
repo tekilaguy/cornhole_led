@@ -558,7 +558,7 @@
 		};
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = FA9335D795B40E3A8BE47917 /* Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig */;
+			baseConfigurationReference = FA9335D795B40E3A8BE47917 /* Pods-Runner.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -618,7 +618,7 @@
 		};
 		97C147041CF9000F007C117D /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2E2CE5066BFB5E03B7CE26FD /* Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig */;
+			baseConfigurationReference = 2E2CE5066BFB5E03B7CE26FD /* Pods-Runner.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
