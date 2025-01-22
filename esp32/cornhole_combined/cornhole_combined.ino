@@ -38,8 +38,8 @@ uint8_t *peerMAC;
 AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
-#define RING_LED_PIN    32
-#define BOARD_LED_PIN   33
+#define RING_LED_PIN    2
+#define BOARD_LED_PIN   4
 #define NUM_LEDS_RING   60
 #define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
