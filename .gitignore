@@ -38,6 +38,7 @@ doc/api/
 .history
 .svn/
 migrate_working_dir/
+.gradle/
 
 # IntelliJ related
 *.iml
