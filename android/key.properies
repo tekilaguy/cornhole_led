@@ -1,4 +1,4 @@
 storePassword=Lbjhzbv0#
 keyPassword=Lbjhzbv0#
 keyAlias=upload
-storeFile=../app/upload-keystore.jks
+storeFile=app/upload-keystore.jks
