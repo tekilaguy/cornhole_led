@@ -67,6 +67,11 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
+dependencies {
+    // <-- The block where you put library dependencies
+    implementation "com.google.android.material:material:1.9.0"
+    // other dependencies...
+}
 flutter {
     source = "../.."
 }

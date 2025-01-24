@@ -35,12 +35,12 @@ class HomeScreenState extends State<HomeScreen> {
     // Iterate through the list of predefined colors
     for (int i = 0; i < colors.length; i++) {
       // Calculate the Euclidean distance between the current color and the given RGB values
-      double distance = (colors[i].red.toDouble() - r.toDouble()) *
-              (colors[i].red.toDouble() - r.toDouble()) +
-          (colors[i].green.toDouble() - g.toDouble()) *
-              (colors[i].green.toDouble() - g.toDouble()) +
-          (colors[i].blue.toDouble() - b.toDouble()) *
-              (colors[i].blue.toDouble() - b.toDouble());
+      double distance = (colors[i].r.toDouble() - r.toDouble()) *
+              (colors[i].r.toDouble() - r.toDouble()) +
+          (colors[i].g.toDouble() - g.toDouble()) *
+              (colors[i].g.toDouble() - g.toDouble()) +
+          (colors[i].b.toDouble() - b.toDouble()) *
+              (colors[i].b.toDouble() - b.toDouble());
 
       // If this distance is smaller than the smallestDistance, update the closestColorIndex and smallestDistance
       if (distance < smallestDistance) {

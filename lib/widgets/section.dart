@@ -17,12 +17,12 @@ class Section extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 10),
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(.50),
+        color: Colors.blue,
         border: Border.all(width: 1.5, color: Colors.black),
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(.75),
+            color: Colors.black,
             spreadRadius: 5,
             blurRadius: 7,
             offset: const Offset(3, 3),
