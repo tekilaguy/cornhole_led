@@ -26,27 +26,24 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<!-- Bluetooth Always Usage Description -->
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app requires access to Bluetooth to discover and connect to external devices.</string>
-
-	<!-- Bluetooth Peripheral Usage Description (If Needed) -->
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>This app uses Bluetooth to communicate with external peripherals.</string>
-
-	<!-- Location When In Use Usage Description -->
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app requires access to your location to scan for nearby Bluetooth devices.</string>
-
-	<!-- Location Always Usage Description (If Needed) -->
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>This app requires continuous access to your location to maintain Bluetooth connections.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app requires access to your photo library to allow you to select and upload images.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs access to the camera.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app requires continuous access to your location to maintain Bluetooth connections.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app requires access to your location to scan for nearby Bluetooth devices.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app requires access to your photo library to allow you to select and upload images.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
