@@ -8,7 +8,7 @@ class Background extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: Image.asset(
-        'assets/images/background.jpg', // Ensure this path is correct
+        'assets/images/background.png', // Ensure this path is correct
         fit: BoxFit.cover,
       ),
     );
