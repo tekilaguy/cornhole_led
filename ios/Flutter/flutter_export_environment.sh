@@ -1,13 +1,13 @@
 #!/bin/sh
 # This is a generated file; do not edit or check into version control.
-export "FLUTTER_ROOT=/Users/tekilaguy/development/flutter"
-export "FLUTTER_APPLICATION_PATH=/Users/tekilaguy/Documents/cornhole_led"
+export "FLUTTER_ROOT=c:\flutter"
+export "FLUTTER_APPLICATION_PATH=G:\Dropbox\Documents\Bluetrace Entertainment\Cornhole Boards\App\cornhole_led"
 export "COCOAPODS_PARALLEL_CODE_SIGN=true"
-export "FLUTTER_TARGET=/Users/tekilaguy/Documents/cornhole_led/lib/main.dart"
+export "FLUTTER_TARGET=lib\main.dart"
 export "FLUTTER_BUILD_DIR=build"
 export "FLUTTER_BUILD_NAME=1.0.9"
 export "FLUTTER_BUILD_NUMBER=1.0.9"
 export "DART_OBFUSCATION=false"
 export "TRACK_WIDGET_CREATION=true"
 export "TREE_SHAKE_ICONS=false"
-export "PACKAGE_CONFIG=/Users/tekilaguy/Documents/cornhole_led/.dart_tool/package_config.json"
+export "PACKAGE_CONFIG=.dart_tool/package_config.json"

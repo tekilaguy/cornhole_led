@@ -210,6 +210,8 @@ class BLEProvider with ChangeNotifier {
           }
         }
       }
+      // If discovery is successful, update the connection state
+      updateConnectionState(true, device);
     } catch (e) {
       logger.e("Failed to discover services: $e");
     }

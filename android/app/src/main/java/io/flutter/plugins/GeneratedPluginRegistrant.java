@@ -21,11 +21,6 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin file_picker, com.mr.flutter.plugin.filepicker.FilePickerPlugin", e);
     }
     try {
-      flutterEngine.getPlugins().add(new com.pauldemarco.flutter_blue.FlutterBluePlugin());
-    } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin flutter_blue, com.pauldemarco.flutter_blue.FlutterBluePlugin", e);
-    }
-    try {
       flutterEngine.getPlugins().add(new com.lib.flutter_blue_plus.FlutterBluePlusPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin flutter_blue_plus, com.lib.flutter_blue_plus.FlutterBluePlusPlugin", e);
