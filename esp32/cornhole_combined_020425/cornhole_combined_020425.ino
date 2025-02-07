@@ -414,45 +414,41 @@ void defaultPreferences(){
 
 // ---------------------- Setup WiFi ----------------------
 void setupWiFi() {
-  Serial.print("Setting up WiFi...");
+  Serial.print("Connecting to WiFi...");
+
   WiFi.mode(WIFI_STA); // Set Wi-Fi to station mode
   WiFi.begin(ssid, password);
 
-    if (deviceRole == MASTER){
-      int attempts = 0;
-      while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        attempts++;
-        Serial.print(".");
-        if (attempts > 20) {
-        Serial.println("");
-          Serial.println("Switching to AP mode...");
-          WiFi.mode(WIFI_AP_STA);
-          WiFi.softAP(ssid, password);
-          Serial.println("Soft Access Point started");
-          Serial.print("Soft IP Address: ");
-          Serial.println(WiFi.softAPIP());
-          Serial.print("Soft SSID: ");
-          Serial.println(ssid);
-          ipAddress = WiFi.softAPIP().toString().c_str();
-          usingFallbackAP = "true";
-          return;
-        }
-      }
-    } else {
-            while (WiFi.status() != WL_CONNECTED) {
-            delay(1000);
-            Serial.print(".");
-        // No need to call WiFi.begin() again here
+  if (deviceRole == MASTER){
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+      attempts++;
+      if (attempts > 20) {
+      Serial.println("");
+        Serial.println("\nSwitching to AP mode...");
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(ssid, password);
+        Serial.println("Soft AP started. IP Address: ");
+        Serial.println(WiFi.softAPIP());
+        ipAddress = WiFi.softAPIP().toString().c_str();
+        //usingFallbackAP = "true";
+        return;
       }
     }
+  } else {
+          while (WiFi.status() != WL_CONNECTED) {
+          delay(500);
+          Serial.print(".");
+      // No need to call WiFi.begin() again here
+    }
+  }
   ipAddress = WiFi.localIP().toString().c_str();
   Serial.println();
-  Serial.println("Connected to WiFi");
-  Serial.println("IP Address: ");
+  Serial.println("\nWiFi connected!");
+  Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
-  Serial.print("Soft SSID: ");
-  Serial.println(ssid);
 }
 
 // ---------------------- Setup ESP-NOW ----------------------
@@ -880,7 +876,7 @@ void sendRestartCommand() {
   const char* message = "Restart";
   esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
   Serial.println("Restart command sent successfully.");
-  delay(500);
+  delay(10000);
   ESP.restart();
 }
 
