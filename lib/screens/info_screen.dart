@@ -34,33 +34,22 @@ class InfoScreenState extends State<InfoScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final Map<String, dynamic> args =
+
+    final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
 
-    wifiEnabled = args['wifiEnabled'] as bool? ?? true;
-    lightsOn = args['lightsOn'] as bool? ?? false;
-    espNowEnabled = args['espNowEnabled'] as bool? ?? false;
+    if (macAddrBoard1.isEmpty && macAddrBoard2.isEmpty) {
+      wifiEnabled = args['wifiEnabled'] as bool? ?? true;
+      lightsOn = args['lightsOn'] as bool? ?? false;
+      espNowEnabled = args['espNowEnabled'] as bool? ?? false;
 
-    homeScreenState = args['homeScreenState'] as HomeScreenState?;
-    if (homeScreenState != null) {
-      homeScreenState!.sendCommand('GET_INFO;');
+      homeScreenState = args['homeScreenState'] as HomeScreenState?;
+
+      if (homeScreenState != null) {
+        homeScreenState!.sendCommand('GET_INFO;');
+      }
     }
-
-//    extractConnectionInfo(connectionInfo);
   }
-
-  // void extractConnectionInfo(String info) {
-  //   try {
-  //     var infoParts = info.split(', ');
-  //     if (infoParts.isNotEmpty) {
-  //       nameBoard1 = infoParts[0];
-  //     } else {
-  //       nameBoard1 = 'Unknown';
-  //     }
-  //   } catch (e) {
-  //     nameBoard1 = 'Error';
-  //   }
-  // }
 
   void toggleSwitch(String command, bool status) {
     final completeCommand = '$command:${status ? 'on' : 'off'};';

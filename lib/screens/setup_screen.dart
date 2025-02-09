@@ -187,14 +187,14 @@ class SetupScreenState extends State<SetupScreen> {
       int blue = (sportEffectColor1.value) & 0xFF;
       commands.add('SC1:$red,$green,$blue');
       homeScreenState!.sendCommand('SC1:$red,$green,$blue');
-   }
+    }
 
     if (sportEffectColor2 != previousSportEffectColor2) {
       int red = (sportEffectColor2.value >> 16) & 0xFF;
       int green = (sportEffectColor2.value >> 8) & 0xFF;
       int blue = (sportEffectColor2.value) & 0xFF;
       commands.add('SC2:$red,$green,$blue');
-     homeScreenState!.sendCommand('SC2:$red,$green,$blue');
+      homeScreenState!.sendCommand('SC2:$red,$green,$blue');
     }
     logger.i(
         "homeScreenState is ${homeScreenState != null ? 'not null' : 'null'}");
@@ -586,57 +586,83 @@ class SetupScreenState extends State<SetupScreen> {
             thickness: 2,
           ),
           const SizedBox(height: 20),
-          buildSlider("Initial Brightness", initialBrightness, (value) {
-            setState(() {
-              initialBrightness = value;
-            });
-          }),
+          buildSliderInput(
+            "Initial Brightness",
+            initialBrightness,
+            0,
+            100,
+            1,
+            (value) {
+              setState(() {
+                initialBrightness = value;
+              });
+            },
+          ),
           const SizedBox(height: 20),
-
-          // First Row
           Row(
             children: [
               Expanded(
-                child: buildQuantityInput(
-                    "Effects Size", blockSize.round(), 1, 30, 1, (value) {
-                  setState(() {
-                    blockSize = value.toDouble();
-                  });
-                }),
+                child: buildSliderInput(
+                  "Effects Size",
+                  blockSize,
+                  1,
+                  30,
+                  1,
+                  (value) {
+                    setState(() {
+                      blockSize = value;
+                    });
+                  },
+                ),
               ),
               const SizedBox(width: 20),
               Expanded(
-                child: buildQuantityInput(
-                    "Effects Speed", effectSpeed.round(), 1, 50, 1, (value) {
-                  setState(() {
-                    effectSpeed = value.toDouble();
-                  });
-                }),
+                child: buildSliderInput(
+                  "Effects Speed",
+                  effectSpeed,
+                  1,
+                  50,
+                  1,
+                  (value) {
+                    setState(() {
+                      effectSpeed = value;
+                    });
+                  },
+                ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-
-          // Second Row
           Row(
             children: [
               Expanded(
-                child: buildQuantityInput("Scoring Duration",
-                    (celebrationDuration / 1000).round(), 1, 10, 1, (value) {
-                  setState(() {
-                    celebrationDuration = value * 1000;
-                  });
-                }),
+                child: buildSliderInput(
+                  "Scoring Duration (seconds)",
+                  celebrationDuration / 1000, // Convert ms to seconds
+                  1,
+                  10,
+                  1,
+                  (value) {
+                    setState(() {
+                      celebrationDuration = value * 1000; // Convert back to ms
+                    });
+                  },
+                ),
               ),
               const SizedBox(width: 20),
               Expanded(
-                child: buildQuantityInput(
-                    "Inactivity Timeout", inactivityTimeout.round(), 0, 60, 5,
-                    (value) {
-                  setState(() {
-                    inactivityTimeout = value.toDouble();
-                  });
-                }),
+                child: buildSliderInput(
+                  "Inactivity Timeout (minutes)",
+                  inactivityTimeout,
+                  0,
+                  60,
+                  1,
+                  (value) {
+                    setState(() {
+                      inactivityTimeout = value;
+                    });
+                  },
+                ),
               ),
             ],
           ),
@@ -683,14 +709,37 @@ class SetupScreenState extends State<SetupScreen> {
           Align(
             alignment: Alignment.bottomRight,
             child: ElevatedButton(
-              onPressed: () {
-                saveDefaultSettings();
-              },
+              onPressed: saveDefaultSettings,
               child: const Text("Save Default Settings"),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget buildSliderInput(String label, double value, double min, double max,
+      double step, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: ((max - min) ~/ step).toInt(),
+          label: value.round().toString(),
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 
@@ -914,61 +963,123 @@ class SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  Widget buildColorPicker(
-      String label, Color currentColor, ValueChanged<Color> onColorChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+Widget buildColorPicker(String label, Color currentColor, ValueChanged<Color> onColorChanged) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
         ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: () async {
-            Color? pickedColor;
+      ),
+      const SizedBox(height: 10),
 
-            pickedColor = await showDialog(
-              context: context,
-              builder: (context) {
-                return AlertDialog(
-                  title: const Text("Pick a Color"),
-                  content: SingleChildScrollView(
-                    child: ColorPicker(
-                      pickerColor: currentColor,
-                      onColorChanged: (color) {
-                        pickedColor = color;
-                      },
-                    ),
+      // Circular Color Picker Button
+      GestureDetector(
+        onTap: () async {
+          // Ensure current color is set correctly
+          Color pickedColor = currentColor;
+
+          Color? selectedColor = await showDialog<Color>(
+            context: context,
+            builder: (context) {
+              return AlertDialog(
+                title: Text("Pick a Color for $label"),
+                content: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // Quick Selection of Preset Colors
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: predefinedColors.map((color) {
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).pop(color);
+                            },
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: color == pickedColor ? Colors.black : Colors.transparent,
+                                  width: 3,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Full Color Picker for Custom Selection
+                      ColorPicker(
+                        pickerColor: pickedColor,
+                        onColorChanged: (color) {
+                          pickedColor = color;
+                        },
+                        showLabel: true,
+                        pickerAreaHeightPercent: 0.5,
+                      ),
+                    ],
                   ),
-                  actions: [
-                    TextButton(
-                      child: const Text("Select"),
-                      onPressed: () {
-                        Navigator.of(context).pop(pickedColor);
-                      },
-                    ),
-                  ],
-                );
-              },
-            );
+                ),
+                actions: [
+                  TextButton(
+                    child: const Text("Cancel"),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  TextButton(
+                    child: const Text("Select"),
+                    onPressed: () {
+                      Navigator.of(context).pop(pickedColor);
+                    },
+                  ),
+                ],
+              );
+            },
+          );
 
-            if (pickedColor != null) {
-              onColorChanged(pickedColor!);
-            }
-          },
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: currentColor,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(width: 1.5, color: Colors.black),
-            ),
+          if (selectedColor != null) {
+            // Update UI and set new color
+            setState(() {
+              onColorChanged(selectedColor);
+            });
+          }
+        },
+        child: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: currentColor, // Always shows the latest color
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(width: 2, color: Colors.black),
           ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
+
+// List of predefined colors for quick selection
+final List<Color> predefinedColors = [
+  Colors.red,
+  Colors.blue,
+  Colors.green,
+  Colors.yellow,
+  Colors.orange,
+  Colors.purple,
+  Colors.cyan,
+  Colors.pink,
+  Colors.teal,
+  Colors.brown,
+  Colors.white,
+  Colors.black,
+];
+
 }
