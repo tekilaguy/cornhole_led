@@ -670,7 +670,11 @@ class SetupScreenState extends State<SetupScreen> {
             color: Colors.blue,
             thickness: 2,
           ),
-          buildInitialColorPicker(),
+buildColorPicker("Initial Startup Color", initialStartupColor, (color) {
+  setState(() {
+    initialStartupColor = color; // Update the color
+  });
+}),
           const SizedBox(height: 20),
           const Divider(
             color: Colors.blue,
