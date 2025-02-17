@@ -12,10 +12,10 @@
 @import file_picker;
 #endif
 
-#if __has_include(<flutter_blue_plus/FlutterBluePlusPlugin.h>)
-#import <flutter_blue_plus/FlutterBluePlusPlugin.h>
+#if __has_include(<flutter_blue_plus_darwin/FlutterBluePlusPlugin.h>)
+#import <flutter_blue_plus_darwin/FlutterBluePlusPlugin.h>
 #else
-@import flutter_blue_plus;
+@import flutter_blue_plus_darwin;
 #endif
 
 @implementation GeneratedPluginRegistrant
