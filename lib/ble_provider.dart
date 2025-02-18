@@ -8,6 +8,7 @@ import 'package:logger/logger.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'global.dart';
+import 'dart:io';
 
 class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
@@ -133,13 +134,16 @@ class BLEProvider with ChangeNotifier {
 
   void manageBluetoothState(BluetoothDevice device) {
     connectionStateSubscription?.cancel();
-    connectionStateSubscription = device.connectionState.listen((state) {
+    connectionStateSubscription = device.connectionState.listen((state) async {
       if (state == BluetoothConnectionState.connected) {
         logger.i("Device connected: ${device.platformName}");
 
         _isConnected = true;
         connectedDevice = device;
 
+    if (Platform.isIOS) {
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
         discoverServices(device);
         reconnectTimer?.cancel();
         notifyListeners();
@@ -154,8 +158,11 @@ class BLEProvider with ChangeNotifier {
   Future<void> connectToDevice(BluetoothDevice device) async {
     logger.i("Connecting to device: ${device.platformName}");
     try {
-      await device.connect(autoConnect: false);
-      await device.requestMtu(240);
+if (Platform.isIOS) {
+  await Future.delayed(const Duration(seconds: 1)); // Small delay for stability
+}
+await device.connect(autoConnect: false);
+await device.requestMtu(240);
       manageBluetoothState(device); // Consolidate state management
     } catch (e) {
       logger.e("Cannot connect, exception occurred: $e");
