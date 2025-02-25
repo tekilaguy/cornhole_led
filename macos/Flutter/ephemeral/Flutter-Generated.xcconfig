@@ -1,6 +1,6 @@
 // This is a generated file; do not edit or check into version control.
-FLUTTER_ROOT=c:\flutter
-FLUTTER_APPLICATION_PATH=G:\Dropbox\Documents\Bluetrace Entertainment\Cornhole Boards\App\cornhole_led
+FLUTTER_ROOT=/Users/tekilaguy/development/flutter
+FLUTTER_APPLICATION_PATH=/Users/tekilaguy/Documents/cornhole_led
 COCOAPODS_PARALLEL_CODE_SIGN=true
 FLUTTER_BUILD_DIR=build
 FLUTTER_BUILD_NAME=1.0.9
