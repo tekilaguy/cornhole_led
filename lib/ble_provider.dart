@@ -132,28 +132,43 @@ class BLEProvider with ChangeNotifier {
     super.dispose();
   }
 
-  void manageBluetoothState(BluetoothDevice device) {
-    connectionStateSubscription?.cancel();
-    connectionStateSubscription = device.connectionState.listen((state) async {
-      if (state == BluetoothConnectionState.connected) {
-        logger.i("Device connected: ${device.platformName}");
+void manageBluetoothState(BluetoothDevice device) {
+  connectionStateSubscription?.cancel();
+  connectionStateSubscription = device.connectionState.listen((state) async {
+    logger.i("BLE Connection State Changed: $state");
 
-        _isConnected = true;
-        connectedDevice = device;
+    if (state == BluetoothConnectionState.connected) {
+      logger.i("✅ Device connected: ${device.platformName}");
 
-    if (Platform.isIOS) {
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-        discoverServices(device);
-        reconnectTimer?.cancel();
-        notifyListeners();
-      } else if (state == BluetoothConnectionState.disconnected) {
-        logger.w("Device disconnected: ${device.platformName}");
-        notifyListeners();
-        attemptReconnection(device);
+      _isConnected = true;
+      connectedDevice = device;
+
+      // Stop scanning manually (fixes iOS staying in scanning mode)
+      FlutterBluePlus.stopScan();
+
+      // Small delay for iOS to ensure proper state update
+      if (Platform.isIOS) {
+        await Future.delayed(const Duration(milliseconds: 500));
       }
-    });
-  }
+
+      discoverServices(device);
+      reconnectTimer?.cancel();
+      notifyListeners();
+    } 
+    else if (state == BluetoothConnectionState.disconnected) {
+      logger.w("⚠️ Device disconnected: ${device.platformName}");
+
+      _isConnected = false;
+      connectedDevice = null;
+
+      // Ensure UI updates properly
+      notifyListeners();
+
+      // Attempt reconnection if needed
+      attemptReconnection(device);
+    }
+  });
+}
 
   Future<void> connectToDevice(BluetoothDevice device) async {
     logger.i("Connecting to device: ${device.platformName}");
