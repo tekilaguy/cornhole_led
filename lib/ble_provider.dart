@@ -177,6 +177,7 @@ if (Platform.isIOS) {
   await Future.delayed(const Duration(seconds: 1)); // Small delay for stability
 }
 await device.connect(autoConnect: false);
+FlutterBluePlus.stopScan();
 await device.requestMtu(240);
       manageBluetoothState(device); // Consolidate state management
     } catch (e) {
@@ -196,6 +197,7 @@ await device.requestMtu(240);
       try {
         logger.i("Attempting to reconnect...");
         await device.connect(autoConnect: false);
+        FlutterBluePlus.stopScan();
         updateConnectionState(true, device);
         logger.i("Reconnected to device: ${device.platformName}");
         break;
