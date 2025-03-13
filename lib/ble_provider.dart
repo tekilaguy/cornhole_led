@@ -24,7 +24,7 @@ class BLEProvider with ChangeNotifier {
   Timer? reconnectTimer;
   static const reconnectDuration = Duration(seconds: 30);
 
-  bool _isConnected = false;
+  bool _isConnected = true;
   bool _wifiEnabled = true;
   bool _lightsOn = true;
   bool _espNowEnabled = true;
@@ -153,6 +153,8 @@ void manageBluetoothState(BluetoothDevice device) {
 
       discoverServices(device);
       reconnectTimer?.cancel();
+
+      logger.i("🔹 Notifying UI: _isConnected = $_isConnected");
       notifyListeners();
     } 
     else if (state == BluetoothConnectionState.disconnected) {
@@ -162,6 +164,7 @@ void manageBluetoothState(BluetoothDevice device) {
       connectedDevice = null;
 
       // Ensure UI updates properly
+      logger.i("🔹 Notifying UI: _isConnected = $_isConnected");
       notifyListeners();
 
       // Attempt reconnection if needed
