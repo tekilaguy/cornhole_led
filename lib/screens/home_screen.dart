@@ -76,7 +76,8 @@ class HomeScreenState extends State<HomeScreen> {
 
   void manageBluetoothState(BluetoothDevice device) {
     device.connectionState.listen((state) {
-      if (state == BluetoothConnectionState.connected) {
+      if (state == BluetoothConnectionState.connected && !isConnected) {
+        discoverServices(device);
         logger.i("Device connected: ${device.platformName}");
         setState(() {
           isConnected = true;
@@ -612,7 +613,7 @@ class HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 20),
-                  isConnected ? buildControlScreen() : buildDeviceList(),
+                  (connectedDevice !=null) ? buildControlScreen() : buildDeviceList(),
                   const SizedBox(height: 20),
                   const StatusIndicators(),
                 ],
