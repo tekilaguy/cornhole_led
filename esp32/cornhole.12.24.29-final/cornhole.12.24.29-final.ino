@@ -246,16 +246,15 @@ void setup() {
   esp_wifi_set_mac(WIFI_IF_STA, hostMAC);
   esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
   printMacAddress();
-  if (WiFi.isConnected()) {
-    setupEspNow();
+  setupEspNow();
 
   // Initialize additional services for MASTER
-    if (deviceRole == MASTER) {
+  if (deviceRole == MASTER) {
     setupBT();
     setupOta();
     setupWebServer();
-    }
   }
+
   // Initialize LEDs
   FastLED.addLeds<LED_TYPE, RING_LED_PIN, COLOR_ORDER>(ringLeds, NUM_LEDS_RING).setCorrection(TypicalLEDStrip);
   FastLED.addLeds<LED_TYPE, BOARD_LED_PIN, COLOR_ORDER>(boardLeds, NUM_LEDS_BOARD).setCorrection(TypicalLEDStrip);
@@ -860,9 +859,8 @@ void processCommand(String command) {
       Serial.println("Wrote deviceRole: " + newRole);
       preferences.end();
       Serial.println("Role updated to: " + newRole);
-      static unsigned long restartTime = 0;
-      if (restartTime == 0) restartTime = millis();
-      if (millis() - restartTime >= 10000) ESP.restart();
+      delay(10000);
+      ESP.restart();
  
   } else if (command.startsWith("UPDATE")) {
         // Handle OTA updates or other update commands
