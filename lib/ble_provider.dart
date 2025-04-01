@@ -24,7 +24,7 @@ class BLEProvider with ChangeNotifier {
   Timer? reconnectTimer;
   static const reconnectDuration = Duration(seconds: 30);
 
-  bool _isConnected = true;
+  bool _isConnected = false;
   bool _wifiEnabled = true;
   bool _lightsOn = true;
   bool _espNowEnabled = true;

@@ -389,8 +389,7 @@ class SetupScreenState extends State<SetupScreen> {
                     child: ListView(
                       children: [
                         const SizedBox(height: 20),
-                        // ignore: unnecessary_null_comparison
-                        (connectedDevice != null) ? buildControlScreen() : const HomeScreen(),
+                        isConnected ? buildControlScreen() : const HomeScreen(),
                         const SizedBox(height: 20),
                         const StatusIndicators(),
                       ],
