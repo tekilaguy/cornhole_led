@@ -246,13 +246,16 @@ void setup() {
   esp_wifi_set_mac(WIFI_IF_STA, hostMAC);
   esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
   printMacAddress();
-  setupEspNow();
 
+  setupEspNow();
+ 
   // Initialize additional services for MASTER
   if (deviceRole == MASTER) {
-    setupBT();
-    setupOta();
+  setupBT();
+  setupOta();
+    if (WiFi.isConnected()) {
     setupWebServer();
+    }
   }
 
   // Initialize LEDs
@@ -849,8 +852,8 @@ void processCommand(String command) {
       Serial.println("Role updated to: " + newRole);
       String currentMessage = "SET_ROLE:MASTER";
       esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
-      delay(10000);
-      ESP.restart();
+      // delay(10000);
+      // ESP.restart();
   
  } else if (command.startsWith("SET_ROLE:MASTER")) {
       String newRole = command.substring(9);
@@ -859,8 +862,9 @@ void processCommand(String command) {
       Serial.println("Wrote deviceRole: " + newRole);
       preferences.end();
       Serial.println("Role updated to: " + newRole);
-      delay(10000);
-      ESP.restart();
+      static unsigned long restartTime = 0;
+      if (restartTime == 0) restartTime = millis();
+      if (millis() - restartTime >= 10000) ESP.restart();
  
   } else if (command.startsWith("UPDATE")) {
         // Handle OTA updates or other update commands

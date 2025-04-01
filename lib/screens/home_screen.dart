@@ -162,10 +162,12 @@ class HomeScreenState extends State<HomeScreen> {
     }
 
     logger.i("Scanning for devices...");
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
+    FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
     FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
         String deviceName = r.advertisementData.advName;
+        debugPrint("Found device: '$deviceName' (iOS/Android check)");
+
         if (deviceName.isNotEmpty) {
           logger.i("Found device: $deviceName");
           if (deviceName == "CornholeBT" && !isConnected) {
@@ -755,7 +757,7 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget buildEffectButton(String label, String effect, {double? width}) {
-     return EffectButton(
+    return EffectButton(
       activeShadowColor: colors[activeColorIndex],
       label: label,
       isActive: activeEffect == effect,
