@@ -349,8 +349,8 @@ class InfoScreenState extends State<InfoScreen> {
         2: FlexColumnWidth(1),
       },
       children: [
-        buildTableRow('Role', boardRole1, boardRole2),
-        //buildTableRow('Name', nameBoard1, nameBoard2),
+        //buildTableRow('Role', boardRole1, boardRole2),
+        buildTableRow('Name', nameBoard1, nameBoard2),
         buildTableRow('MAC', macAddrBoard1, macAddrBoard2),
         buildTableRow('IP', ipAddrBoard1, ipAddrBoard2),
         //buildTableRow('Voltage', '$batteryVoltageBoard1 V', '$batteryVoltageBoard2 V'),

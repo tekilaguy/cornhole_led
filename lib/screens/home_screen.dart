@@ -1,4 +1,5 @@
 // home_screen.dart
+import 'dart:io' show Platform;
 import 'dart:async'; // Required for Timer
 import 'dart:convert'; // Required for utf8.encode
 import 'package:flutter/material.dart';
@@ -82,6 +83,9 @@ class HomeScreenState extends State<HomeScreen> {
           isConnected = true;
           connectedDevice = device;
         });
+        if (Platform.isIOS) {
+          Future.delayed(const Duration(milliseconds: 500));
+        }
         discoverServices(device);
         reconnectTimer?.cancel();
       } else if (state == BluetoothConnectionState.disconnected) {
@@ -98,8 +102,12 @@ class HomeScreenState extends State<HomeScreen> {
   Future<void> connectToDevice(BluetoothDevice device) async {
     logger.i("Connecting to device: ${device.platformName}");
     try {
-      await device.connect(autoConnect: false);
-      await device.requestMtu(240);
+      if (Platform.isIOS) {
+        await device.connect();
+      } else {
+        await device.connect(autoConnect: false);
+        await device.requestMtu(240);
+      }
       manageBluetoothState(device); // Consolidate state management
 
       setState(() {
@@ -170,7 +178,9 @@ class HomeScreenState extends State<HomeScreen> {
 
         if (deviceName.isNotEmpty) {
           logger.i("Found device: $deviceName");
-          if (deviceName == "CornholeBT" && !isConnected) {
+          //if (deviceName == "CornholeBT" && !isConnected) {
+          if ((deviceName == "CornholeBT" || deviceName.isEmpty) &&
+              !isConnected) {
             logger.i("Attempting to connect to CornholeBT...");
             connectToDevice(r.device);
             FlutterBluePlus.stopScan();
