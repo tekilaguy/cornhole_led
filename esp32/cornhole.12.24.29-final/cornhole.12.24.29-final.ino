@@ -275,12 +275,6 @@ void setup() {
   button.attachLongPressStop(longPressStop);
   ledEffects.powerOnEffect();
 
-  // // Initialize board2 structure
-  // strcpy(board2.device, "Board 2");
-  // strcpy(board2.name, board2Name.c_str());
-  // memcpy(board2.macAddr, broadcastMAC, 6); // Set to broadcast MAC
-  // strcpy(board2.ipAddr, WiFi.localIP().toString().c_str());
-
   Serial.println("Setup completed.");
 }
 
@@ -338,9 +332,15 @@ void initializePreferences() {
         preferences.putString("board1Name", "Board 1");
         preferences.putString("board2Name", "Board 2");
 
-        preferences.putInt("initialColorR", 0);
-        preferences.putInt("initialColorG", 0);
-        preferences.putInt("initialColorB", 255);
+        if (savedRole == "MASTER") {
+          preferences.putInt("initialColorR", 0);
+          preferences.putInt("initialColorG", 0);
+          preferences.putInt("initialColorB", 255);  // Blue
+        } else {
+          preferences.putInt("initialColorR", 255);
+          preferences.putInt("initialColorG", 255);
+          preferences.putInt("initialColorB", 255);  // White
+        }
 
         preferences.putInt("sportsColor1R", 191);
         preferences.putInt("sportsColor1G", 87);
