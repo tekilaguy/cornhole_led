@@ -19,8 +19,9 @@
 // ---------------------- Configuration ----------------------
 
 // Define Roles
-enum DeviceRole { MASTER, SLAVE };
-
+enum DeviceRole { UNDECIDED, MASTER, SLAVE };
+bool masterAnnounced = false;
+unsigned long roleDecisionStartTime = 0;
 DeviceRole deviceRole;
 
 // MAC Addresses
@@ -31,15 +32,15 @@ const uint8_t broadcastMAC[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 String ipAddress;
 
 uint8_t deviceMAC[6];
-uint8_t *hostMAC;
-uint8_t *peerMAC;
+uint8_t hostMAC[6];
+uint8_t peerMAC[6];
 
 // Web Server (only for MASTER)
 AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
-#define RING_LED_PIN    32
-#define BOARD_LED_PIN   33
+#define RING_LED_PIN    12
+#define BOARD_LED_PIN   14
 #define NUM_LEDS_RING   60
 #define NUM_LEDS_BOARD  216
 #define LED_TYPE        WS2812B
@@ -51,8 +52,8 @@ CRGB ringLeds[NUM_LEDS_RING];
 CRGB boardLeds[NUM_LEDS_BOARD];
 
 // ---------------------- Button and Sensors ----------------------
-#define BUTTON_PIN 12
-#define SENSOR_PIN 14
+#define BUTTON_PIN 2
+#define SENSOR_PIN 4
 #define BATTERY_PIN 35
 
 // Button Setup
@@ -222,43 +223,85 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting setup...");
 
-  // Initialize Preferences
-  initializePreferences(); // Initialize preferences if not already done
+  // Load saved preferences
+  initializePreferences(); 
   defaultPreferences();
-  deviceRole = (savedRole == "MASTER") ? MASTER : SLAVE;
+   currentColor = initialColor;
 
-  // Assign Device Role
-  if (deviceRole == MASTER){
-    peerMAC = slaveMAC;
-    hostMAC = masterMAC;
-    initialColor = CRGB::Blue;
-  } else {
-    peerMAC = masterMAC;
-    hostMAC = slaveMAC;
-    initialColor = CRGB::Red;
-  }
-
-  Serial.println(deviceRole == MASTER ? "Device Role: MASTER" : "Device Role: SLAVE");
-
-  currentColor = initialColor;
-
-  setupWiFi();
-  esp_wifi_set_mac(WIFI_IF_STA, hostMAC);
+  // Read this device’s MAC
   esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
   printMacAddress();
 
-  setupEspNow();
- 
-  // Initialize additional services for MASTER
+  // Setup WiFi after role decided
+  setupWiFi();
+
+  setupEspNow();  // Start receiving role announcements
+  
+  // Start listening for other boards
+  deviceRole = UNDECIDED;
+  masterAnnounced = false;
+  roleDecisionStartTime = millis();
+  unsigned long waitDuration = 5000;
+
+
+  Serial.println("Waiting to hear from master...");
+
+  // Listen for 5 seconds
+  while (!masterAnnounced && millis() - roleDecisionStartTime < 5000) {
+    delay(100);
+  }
+
+  // Decide role
+  if (masterAnnounced) {
+    deviceRole = SLAVE;
+    Serial.println("Master detected! Acting as SLAVE.");
+  } else {
+    deviceRole = MASTER;
+    Serial.println("No master detected! Promoting self to MASTER.");
+  }
+
+  // Save the role persistently
+  preferences.begin("cornhole", false);
+  preferences.putString("deviceRole", deviceRole == MASTER ? "MASTER" : "SLAVE");
+  preferences.end();
+
+  // Setup MACs for peer communication
   if (deviceRole == MASTER) {
-  setupBT();
-  setupOta();
+    memcpy(peerMAC, slaveMAC, 6);
+    memcpy(hostMAC, masterMAC, 6);
+  } else {
+    memcpy(peerMAC, masterMAC, 6);
+    memcpy(hostMAC, slaveMAC, 6);
+  }
+
+  // Broadcast our role
+  String announceMsg = String("ROLE:") + (deviceRole == MASTER ? "MASTER" : "SLAVE");
+  bool sent = false;
+  int retries = 3;
+  while (!sent && retries-- > 0) {
+    esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)announceMsg.c_str(), announceMsg.length());
+    if (result == ESP_OK) {
+      sent = true;
+      Serial.println("Role announcement sent successfully.");
+    } else {
+      Serial.println("Failed to announce role via ESP-NOW. Retrying...");
+      delay(200);
+    }
+  }
+  if (!sent) {
+    Serial.println("Failed to send role announcement after retries.");
+  }
+
+  // Setup BLE, OTA, and Web Server only for MASTER
+  if (deviceRole == MASTER) {
+    setupBT();
+    setupOta();
     if (WiFi.isConnected()) {
-    setupWebServer();
+      setupWebServer();
     }
   }
 
-  // Initialize LEDs
+  // Setup LEDs
   FastLED.addLeds<LED_TYPE, RING_LED_PIN, COLOR_ORDER>(ringLeds, NUM_LEDS_RING).setCorrection(TypicalLEDStrip);
   FastLED.addLeds<LED_TYPE, BOARD_LED_PIN, COLOR_ORDER>(boardLeds, NUM_LEDS_BOARD).setCorrection(TypicalLEDStrip);
   FastLED.setMaxPowerInVoltsAndMilliamps(VOLTS, MAX_AMPS);
@@ -266,7 +309,24 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
-  // Initialize Sensors and Buttons
+  // Identify MASTER with green flash
+  if (deviceRole == MASTER) {
+    for (int i = 0; i < 5; i++) {
+      fill_solid(boardLeds, NUM_LEDS_BOARD, CRGB::Green);
+      fill_solid(ringLeds, NUM_LEDS_RING, CRGB::Green);
+      FastLED.show();
+      delay(300);
+      FastLED.clear();
+      FastLED.show();
+      delay(300);
+    }
+
+    ledEffects.setColor(initialColor);  
+    FastLED.clear();
+    ledEffects.applyEffect(effects[effectIndex]);  
+  }
+
+  // Setup button and IR sensor
   pinMode(SENSOR_PIN, INPUT_PULLUP);
   pinMode(BATTERY_PIN, INPUT);
   button.attachClick(singleClick);
@@ -274,6 +334,7 @@ void setup() {
   button.attachLongPressStart(longPressStart);
   button.attachLongPressStop(longPressStop);
   ledEffects.powerOnEffect();
+
 
   Serial.println("Setup completed.");
 }
@@ -284,10 +345,21 @@ void loop() {
   button.tick();
   handleIRSensor();
 
+  if (millis() - roleDecisionStartTime < 5000) {
+    // still in decision window
+  } else if (!masterAnnounced && deviceRole != MASTER) {
+    Serial.println("No MASTER detected. Promoting to MASTER...");
+    preferences.begin("cornhole", false);
+    preferences.putString("deviceRole", "MASTER");
+    preferences.end();
+    delay(500);
+    ESP.restart();
+  }
   // Process BLE data if new data has been received (MASTER only)
   if (deviceRole == MASTER) {
     if (!deviceConnected && currentMillis - previousMillisBT >= intervalBT) {
       previousMillisBT = currentMillis;
+      delay(1000);
       btPairing();
     } else { 
        if (bleDataReceived) {
@@ -365,7 +437,14 @@ void initializePreferences() {
 void defaultPreferences(){
   preferences.begin("cornhole", false);
 
-  savedRole = preferences.getString("deviceRole"); // Default MASTER if not set
+  savedRole = preferences.getString("deviceRole");
+  if (savedRole == "MASTER") {
+    deviceRole = MASTER;
+  } else if (savedRole == "SLAVE") {
+    deviceRole = SLAVE;
+  } else {
+    deviceRole = UNDECIDED;
+  }
 
   ssid = preferences.getString("ssid");
   password = preferences.getString("password");
@@ -442,13 +521,24 @@ void setupWiFi() {
           return;
         }
       }
-    } else {
-            while (WiFi.status() != WL_CONNECTED) {
-            delay(1000);
-            Serial.print(".");
-        // No need to call WiFi.begin() again here
-      }
+  } else {
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 60) { // wait up to 60 seconds
+      delay(1000);
+      Serial.print(".");
+      attempts++;
     }
+
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("\nFailed to connect to Master. Promoting to MASTER...");
+      preferences.begin("cornhole", false);
+      preferences.putString("deviceRole", "MASTER");
+      preferences.end();
+      delay(1000);
+      ESP.restart(); // reboot as Master
+      return;
+    }
+  }
   ipAddress = WiFi.localIP().toString().c_str();
   Serial.println();
   Serial.println("Connected to WiFi");
@@ -852,8 +942,8 @@ void processCommand(String command) {
       Serial.println("Role updated to: " + newRole);
       String currentMessage = "SET_ROLE:MASTER";
       esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
-      // delay(10000);
-      // ESP.restart();
+      delay(10000);
+      ESP.restart();
   
  } else if (command.startsWith("SET_ROLE:MASTER")) {
       String newRole = command.substring(9);
@@ -862,9 +952,8 @@ void processCommand(String command) {
       Serial.println("Wrote deviceRole: " + newRole);
       preferences.end();
       Serial.println("Role updated to: " + newRole);
-      static unsigned long restartTime = 0;
-      if (restartTime == 0) restartTime = millis();
-      if (millis() - restartTime >= 10000) ESP.restart();
+      delay(10000);
+      ESP.restart();
  
   } else if (command.startsWith("UPDATE")) {
         // Handle OTA updates or other update commands
@@ -933,7 +1022,11 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
   String receivedData = String((char*)incomingData).substring(0, len);
   Serial.println("Received data: " + receivedData);
 
-    if (len == sizeof(struct_message)) {
+  if (receivedData.startsWith("ROLE:MASTER")) {
+    Serial.println("Received master announcement over ESP-NOW");
+    masterAnnounced = true;
+  }
+   if (len == sizeof(struct_message)) {
         // Received data is a struct_message
         memcpy(&board2, incomingData, sizeof(board2));
         board2DataReceived = true; // Set the flag
