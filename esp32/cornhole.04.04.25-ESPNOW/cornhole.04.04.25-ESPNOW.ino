@@ -1232,7 +1232,7 @@ void toggleEspNow(bool status) {
 
 void btPairing() {
   if (!deviceConnected) {
-    if (deviceRole == MASTER) {BLE in pairing mode
+    if (deviceRole == MASTER) {
       pServer->startAdvertising();  // restart advertising
       Serial.println("BLE in pairing mode");
     }
