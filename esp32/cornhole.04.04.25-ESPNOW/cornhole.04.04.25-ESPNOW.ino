@@ -117,7 +117,7 @@ BLECharacteristic *pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 uint32_t previousMillisBT = 0;
-const uint32_t intervalBT = 10000;  // 10 seconds
+const uint32_t intervalBT = 2000;  // 2 seconds
 String rxValueStdStr;
 volatile bool bleDataReceived = false;
 String bleCommandBuffer = "";
@@ -219,7 +219,7 @@ class MyCallbacks : public BLECharacteristicCallbacks {
 
 // ---------------------- Setup ----------------------
 void setup() {
-  delay(5000);
+  delay(2000);
   Serial.begin(115200);
   Serial.println("Starting setup...");
 
@@ -332,14 +332,14 @@ void loop() {
     preferences.begin("cornhole", false);
     preferences.putString("deviceRole", "MASTER");
     preferences.end();
-    delay(500);
+    delay(2000);
     ESP.restart();
   }
   // Process BLE data if new data has been received (MASTER only)
   if (deviceRole == MASTER) {
     if (!deviceConnected && currentMillis - previousMillisBT >= intervalBT) {
       previousMillisBT = currentMillis;
-      delay(1000);
+      delay(2000);
       btPairing();
     } else {
       if (bleDataReceived) {
@@ -422,7 +422,7 @@ void defaultPreferences() {
     deviceRole = MASTER;
   } else {
     deviceRole = SLAVE;
-  } 
+  }
   ssid = preferences.getString("ssid");
   password = preferences.getString("password");
   board1Name = preferences.getString("board1Name");
@@ -501,7 +501,7 @@ void setupWiFi() {
   } else {
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 60) {  // wait up to 60 seconds
-      delay(1000);
+      delay(2000);
       Serial.print(".");
       attempts++;
     }
@@ -511,7 +511,7 @@ void setupWiFi() {
       preferences.begin("cornhole", false);
       preferences.putString("deviceRole", "MASTER");
       preferences.end();
-      delay(1000);
+      delay(2000);
       ESP.restart();  // reboot as Master
       return;
     }
@@ -546,18 +546,27 @@ void setupEspNow() {
 
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo));
-  memcpy(peerInfo.peer_addr, peerMAC, 6);
+  memcpy(peerInfo.peer_addr, broadcastMAC, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
   peerInfo.ifidx = WIFI_IF_STA;
 
-  if (esp_now_is_peer_exist(peerMAC)) {
+  if (esp_now_is_peer_exist(broadcastMAC)) {
     esp_now_del_peer(peerMAC);
   }
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
   } else {
     Serial.println("Peer added successfully");
   }
+}
+
+// Announce current role
+void announceRole(const char *role) {
+  String msg = String("ROLE:") + role;
+  esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)msg.c_str(), msg.length());
+
+  Serial.printf("📤 Sent by %s: %s %s\n", macToString(deviceMAC).c_str(), msg.c_str(),
+                result == ESP_OK ? "✅" : "❌");
 }
 
 // ---------------------- Setup BLE (MASTER only) ----------------------
@@ -737,9 +746,9 @@ void handleBluetoothData(String command) {
     if (completeCommand.startsWith("SET_ROLE:SLAVE")) {
 
     } else {
-      esp_err_t result = esp_now_send(peerMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
+      esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
     }
-    //sendData("espNow", completeCommand, "");
+    // sendData("espNow", completeCommand, "");
 
     // Remove the processed command from accumulated data
     accumulatedData = accumulatedData.substring(endIndex + 1);
@@ -756,7 +765,7 @@ void processCommand(String command) {
     const char *message = "CLEAR_ALL";
     esp_err_t result = esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
     Serial.println("All saved variables cleared.");
-    delay(3000);
+    delay(2000);
     preferences.begin("cornhole", false);
     preferences.clear();
     preferences.putBool("nvsInit", false);
@@ -916,7 +925,7 @@ void processCommand(String command) {
     Serial.println("Role updated to: " + newRole);
     String currentMessage = "SET_ROLE:MASTER";
     esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
-    delay(10000);
+    delay(2000);
     ESP.restart();
 
   } else if (command.startsWith("SET_ROLE:MASTER")) {
@@ -926,7 +935,7 @@ void processCommand(String command) {
     Serial.println("Wrote deviceRole: " + newRole);
     preferences.end();
     Serial.println("Role updated to: " + newRole);
-    delay(10000);
+    delay(2000);
     ESP.restart();
 
   } else if (command.startsWith("UPDATE")) {
@@ -937,6 +946,24 @@ void processCommand(String command) {
   } else if (command.startsWith("r2:")) {
     Serial.println("Sending SLAVE info to App.");
 
+  } else if (command.startsWith("ROLE:MASTER")) {
+    String boardRole = command.substring(5);
+    if (deviceRole == MASTER) {
+      String msg = "Change";
+      esp_now_send(broadcastMAC, (uint8_t *)msg.c_str(), msg.length());
+    }
+  } else if (command == "Change") {
+    String newRole = "";
+    if (deviceRole = MASTER) {
+      newRole = "SLAVE";
+    } else {
+      newRole = "MASTER";
+    }
+    preferences.begin("cornhole", false);
+    preferences.remove("deviceRole");
+    preferences.putString("deviceRole", newRole);
+    preferences.end();
+    ESP.restart();
   } else {
     Serial.println("Unknown command: " + command);
   }
@@ -947,7 +974,7 @@ void sendRestartCommand() {
   const char *message = "Restart";
   esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
   Serial.println("Restart command sent successfully.");
-  delay(500);
+  delay(2000);
   ESP.restart();
 }
 
@@ -975,7 +1002,7 @@ void sendBoardInfo() {
             ipAddress.c_str(),
             readBatteryLevel(),
             (int)readBatteryVoltage());
-    esp_err_t result = esp_now_send(peerMAC, (uint8_t *)data, strlen(data));
+    esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)data, strlen(data));
     Serial.print("Sending Board info to ESP-NOW: ");
     Serial.println(data);
   }
@@ -995,9 +1022,10 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
   String receivedData = String((char *)incomingData).substring(0, len);
   Serial.println("Received data: " + receivedData);
 
-  if (receivedData.startsWith("ROLE:MASTER")) {
-    Serial.println("Received master announcement over ESP-NOW");
-    masterAnnounced = true;
+  if (receivedData.startsWith("ROLE:ESP_NOW")) {
+    String announceMsg = String("ROLE:") + (deviceRole == MASTER ? "MASTER" : "SLAVE");
+    esp_now_send(broadcastMAC, (uint8_t *)announceMsg.c_str(), announceMsg.length());
+    return;
   }
   if (len == sizeof(struct_message)) {
     // Received data is a struct_message
@@ -1073,7 +1101,7 @@ void sendData(const String &device, const String &type, const String &data) {
 
     // Check if the current message is different from the last sent message
     if (currentMessage != lastEspNowMessage) {
-      esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
+      esp_now_send(broadcastMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
       Serial.println("Sending to ESP-NOW: " + currentMessage);
 
       // Update the last sent message
@@ -1118,7 +1146,7 @@ void updateBluetoothData(String data) {
     // Send the chunk instead of the entire message
     pCharacteristic->setValue(chunk.c_str());  // Convert String to C-string for BLE transmission
     pCharacteristic->notify();                 // Send the chunk via BLE notification
-    delay(20);                                 // Delay to avoid congestion
+    delay(200);                                 // Delay to avoid congestion
   }
 }
 
@@ -1214,7 +1242,7 @@ void btPairing() {
     deviceConnected = true;
 
     //currentColor = colors[colorIndex];
-    delay(1000);
+    delay(2000);
     sendData("app", "ColorIndex", String(colorIndex));
     sendData("app", "Effect", effects[effectIndex]);
     Serial.println("Bluetooth Device paired successfully");
