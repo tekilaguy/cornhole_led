@@ -26,11 +26,7 @@ enum DeviceRole { MASTER,
 DeviceRole deviceRole;
 
 // MAC Addresses
-uint8_t masterMAC[6] = { 0x24, 0x6F, 0x28, 0x88, 0xB4, 0xC8 };  // MAC address of the master board
-uint8_t slaveMAC[6] = { 0x24, 0x6F, 0x28, 0x88, 0xB4, 0xC9 };   // MAC address of the slave board
 const uint8_t broadcastMAC[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-
-String ipAddress;
 
 uint8_t deviceMAC[6];
 uint8_t hostMAC[6];
@@ -38,12 +34,14 @@ uint8_t peerMAC[6];
 uint8_t knownPeers[MAX_PEERS][6];
 int peerCount = 0;
 
+String ipAddress;
+
 // Web Server (only for MASTER)
 AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
-#define RING_LED_PIN 2
-#define BOARD_LED_PIN 4
+#define RING_LED_PIN 12
+#define BOARD_LED_PIN 14
 #define NUM_LEDS_RING 60
 #define NUM_LEDS_BOARD 216
 #define LED_TYPE WS2812B
@@ -55,8 +53,8 @@ CRGB ringLeds[NUM_LEDS_RING];
 CRGB boardLeds[NUM_LEDS_BOARD];
 
 // ---------------------- Button and Sensors ----------------------
-#define BUTTON_PIN 12
-#define SENSOR_PIN 14
+#define BUTTON_PIN 2
+#define SENSOR_PIN 4
 #define BATTERY_PIN 35
 
 // Button Setup
@@ -176,8 +174,7 @@ void sendBoardInfo();
 void startOtaUpdate(String firmwareUrl);
 void singleClick();
 void doubleClick();
-void longPressStart();
-void longPressStop();
+void longPress();
 void toggleLights(bool status);
 void toggleWiFi(bool status);
 void toggleEspNow(bool status);
@@ -240,12 +237,16 @@ void setup() {
   WiFi.mode(WIFI_STA);
   delay(2000);
   setupEspNow();
+  String announceMsg = "ROLE:" + savedRole;
+  esp_now_send(broadcastMAC, (uint8_t *)announceMsg.c_str(), announceMsg.length());
 
   //announceRole(savedRole);
   unsigned long startTime = millis();
   bool conflictingRoleSeen = false;
   bool oppositeRoleSeen = false;
+
   String receivedRole = "";
+
   while (millis() - startTime < 2000) {
     if (espNowDataReceived) {
       espNowDataReceived = false;
@@ -277,13 +278,8 @@ void setup() {
     }
   }
 
-  if (savedRole == "MASTER") {
-    memcpy(peerMAC, slaveMAC, 6);
-    memcpy(hostMAC, masterMAC, 6);
-  } else {
-    memcpy(peerMAC, masterMAC, 6);
-    memcpy(hostMAC, slaveMAC, 6);
-  }
+  esp_read_mac(hostMAC, ESP_MAC_WIFI_STA);
+
   Serial.println("Device Role: " + savedRole);
   setupWiFi();
   currentColor = initialColor;
@@ -304,9 +300,10 @@ void setup() {
   pinMode(BATTERY_PIN, INPUT);
   button.attachClick(singleClick);
   button.attachDoubleClick(doubleClick);
-  button.attachLongPressStart(longPressStart);
-  button.attachLongPressStop(longPressStop);
+  button.attachLongPressStart(longPress);
   ledEffects.powerOnEffect();
+  effectIndex = getEffectIndex("Solid");  // or any default effect
+  ledEffects.applyEffect(effects[effectIndex]);
   Serial.println("Setup completed.");
 }
 // ---------------------- Loop ----------------------
@@ -983,9 +980,12 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
   String receivedData = String((char *)incomingData).substring(0, len);
   const uint8_t *senderMAC = info->src_addr;
 
-  Serial.printf("📩 Received ESP-NOW (%d bytes) from: %s\n", len, macToString(info->src_addr).c_str());
-  Serial.println("📦 Data: " + receivedData);
-
+  if (receivedData.startsWith("ROLE:")) {
+    Serial.println("📢 Received role broadcast: " + receivedData);
+  } else {
+    Serial.printf("📩 Received ESP-NOW (%d bytes) from: %s\n", len, macToString(info->src_addr).c_str());
+    Serial.println("📦 Data: " + receivedData);
+  }
   // Don't process messages sent by this device
   esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
   if (memcmp(senderMAC, deviceMAC, 6) == 0) {
@@ -1025,20 +1025,28 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
     String otherRole = receivedData.substring(5);
     Serial.println("📢 Received role announcement: " + otherRole);
 
-    // Update peer MAC if not set
-    if (peerMAC == nullptr || memcmp(peerMAC, info->src_addr, 6) != 0) {
-      memcpy(peerMAC, info->src_addr, 6);
+    // Update peer MAC *only* if it’s not already known
+    bool isNewPeer = true;
+    for (int i = 0; i < peerCount; i++) {
+      if (memcmp(knownPeers[i], info->src_addr, 6) == 0) {
+        isNewPeer = false;
+        break;
+      }
+    }
+    if (isNewPeer && peerCount < MAX_PEERS) {
+      memcpy(knownPeers[peerCount], info->src_addr, 6);
+      peerCount++;
+      memcpy(peerMAC, info->src_addr, 6);  // ✅ set here!
       Serial.println("🔗 Updated peer MAC: " + macToString(peerMAC));
     }
 
-    // Conflict resolution logic
+    // Role conflict resolution
     if (savedRole == otherRole) {
-      // Conflict detected, change to SLAVE
       Serial.println("⚠️ Conflict detected: same role seen! Switching to SLAVE.");
       preferences.begin("cornhole", false);
       preferences.putString("deviceRole", "SLAVE");
       preferences.end();
-      delay(2000);
+      delay(1000);
       ESP.restart();
     }
 
@@ -1089,6 +1097,8 @@ String macToString(const uint8_t *mac) {
   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   return String(macStr);
+  Serial.print("📡 This device MAC: ");
+  Serial.println(macToString(hostMAC));
 }
 
 // ---------------------- Communication Functions ----------------------
@@ -1206,20 +1216,15 @@ void doubleClick() {
   Serial.println("Double Click: Effect changed to " + effects[effectIndex]);
 }
 
-void longPressStart() {
+void longPress() {
   toggleLights(!lightsOn);
-
-  String message = String(lightsOn ? "on" : "off");
   sendData("espNow", "toggleLights", lightsOn ? "on" : "off");
-  if (deviceRole == MASTER) {
-  }
-  Serial.println("Long Press: Lights turned " + message);
-}
 
-void longPressStop() {
-  // Log stop for debugging, if needed
-  sendData("app", "toggleLights", lightsOn ? "on" : "off");
-  Serial.println("Long Press Released");
+  if (deviceRole == MASTER) {
+    sendData("app", "toggleLights", lightsOn ? "on" : "off");
+  }
+
+  Serial.println("Long Press: Lights turned " + String(lightsOn ? "on" : "off"));
 }
 
 // ---------------------- Utility Functions ----------------------
