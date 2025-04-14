@@ -540,7 +540,7 @@ await device.requestMtu(240);
   }
 
   void sendRestart() {
-    sendCommand('sendRestart;');
+    sendCommand('Restart;');
   }
 
 // Setters for Board 1

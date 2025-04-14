@@ -12,31 +12,35 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <HTTPUpdate.h>
 #include <ESPAsyncWebServer.h>
 
-// ---------------------- Configuration ----------------------
+// ---------------------- ESP-NOW Configuration ----------------------
 
 // Define Roles
+#define MAX_PEERS 6
 enum DeviceRole { MASTER,
                   SLAVE };
 
 DeviceRole deviceRole;
 
 // MAC Addresses
-uint8_t masterMAC[] = { 0x24, 0x6F, 0x28, 0x88, 0xB4, 0xC8 };  // MAC address of the master board
-uint8_t slaveMAC[] = { 0x24, 0x6F, 0x28, 0x88, 0xB4, 0xC9 };   // MAC address of the slave board
-const uint8_t broadcastMAC[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+const uint8_t broadcastMAC[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+uint8_t deviceMAC[6];
+uint8_t hostMAC[6];
+uint8_t peerMAC[6];
+uint8_t knownPeers[MAX_PEERS][6];
+
+int peerCount = 0;
+bool roleMessageSeen = false;
 
 String ipAddress;
 
-uint8_t deviceMAC[6];
-uint8_t *hostMAC;
-uint8_t *peerMAC;
-
 // Web Server (only for MASTER)
-AsyncWebServer server(8080);
+//AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
 #define RING_LED_PIN 12
@@ -127,6 +131,7 @@ bool usingFallbackAP = false;
 bool wifiEnabled = true;  // Variable to toggle WiFi on and off
 
 // Global declarations
+String setupRole;
 String lastEspNowMessage = "";
 String lastAppMessage = "";
 String espNowDataBuffer = "";
@@ -155,11 +160,10 @@ int previousBrightness;
 
 // ---------------------- Function Declarations ----------------------
 void setupWiFi();
-void printMacAddress();
 void setupEspNow();
 void setupBT();
 void setupOta();
-void setupWebServer();
+//void setupWebServer();
 void initializePreferences();
 void defaultPreferences();
 void handleBluetoothData(String data);
@@ -172,8 +176,7 @@ void sendBoardInfo();
 void startOtaUpdate(String firmwareUrl);
 void singleClick();
 void doubleClick();
-void longPressStart();
-void longPressStop();
+void longPress();
 void toggleLights(bool status);
 void toggleWiFi(bool status);
 void toggleEspNow(bool status);
@@ -187,6 +190,7 @@ void powerOnEffect();
 float readBatteryVoltage();
 int readBatteryLevel();
 void processCommand(String command);
+void resolveRole();
 
 // Callback class for handling BLE connection events
 class MyServerCallbacks : public BLEServerCallbacks {
@@ -218,43 +222,42 @@ class MyCallbacks : public BLECharacteristicCallbacks {
 
 // ---------------------- Setup ----------------------
 void setup() {
-  delay(5000);
+  delay(1000);
   Serial.begin(115200);
   Serial.println("Starting setup...");
 
-  // Initialize Preferences
-  initializePreferences();  // Initialize preferences if not already done
+  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
+  memcpy(hostMAC, deviceMAC, 6);
+
+  initializePreferences();
   defaultPreferences();
-  deviceRole = (savedRole == "MASTER") ? MASTER : SLAVE;
+  //setupWiFi();
+  WiFi.disconnect(true);
+  delay(100);
+  WiFi.mode(WIFI_AP_STA);
+  esp_wifi_set_promiscuous(true);  // <-- Required before setting channel
+  esp_wifi_set_channel(2, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);  // <-- Restore normal state
+  delay(random(300, 2000));         // Helps stagger role elections
 
-  // Assign Device Role
-  if (deviceRole == MASTER) {
-    peerMAC = slaveMAC;
-    hostMAC = masterMAC;
-  } else {
-    peerMAC = masterMAC;
-    hostMAC = slaveMAC;
+  setupEspNow();
+  resolveRole();
+
+  Serial.print("📡 This Device MAC: ");
+  Serial.println(macToString(deviceMAC));
+  printPeers();
+
+  Serial.println("Device Role: " + savedRole);
+  
+  if (savedRole == "MASTER") {
+    setupBT();
+    setupOta();
+    // setupWebServer();
+    //setupWiFi();
   }
-
-  Serial.println(deviceRole == MASTER ? "Device Role: MASTER" : "Device Role: SLAVE");
 
   currentColor = initialColor;
 
-  setupWiFi();
-  esp_wifi_set_mac(WIFI_IF_STA, hostMAC);
-  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
-  printMacAddress();
-  WiFi.mode(WIFI_STA);
-  setupEspNow();
-
-  // Initialize additional services for MASTER
-  if (deviceRole == MASTER) {
-    setupBT();
-    setupOta();
-    setupWebServer();
-  }
-
-  // Initialize LEDs
   FastLED.addLeds<LED_TYPE, RING_LED_PIN, COLOR_ORDER>(ringLeds, NUM_LEDS_RING).setCorrection(TypicalLEDStrip);
   FastLED.addLeds<LED_TYPE, BOARD_LED_PIN, COLOR_ORDER>(boardLeds, NUM_LEDS_BOARD).setCorrection(TypicalLEDStrip);
   FastLED.setMaxPowerInVoltsAndMilliamps(VOLTS, MAX_AMPS);
@@ -262,24 +265,17 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
-  // Initialize Sensors and Buttons
   pinMode(SENSOR_PIN, INPUT_PULLUP);
   pinMode(BATTERY_PIN, INPUT);
   button.attachClick(singleClick);
   button.attachDoubleClick(doubleClick);
-  button.attachLongPressStart(longPressStart);
-  button.attachLongPressStop(longPressStop);
+  button.attachLongPressStop(longPress);
   ledEffects.powerOnEffect();
-
-  // // Initialize board2 structure
-  // strcpy(board2.device, "Board 2");
-  // strcpy(board2.name, board2Name.c_str());
-  // memcpy(board2.macAddr, broadcastMAC, 6); // Set to broadcast MAC
-  // strcpy(board2.ipAddr, WiFi.localIP().toString().c_str());
+  effectIndex = getEffectIndex("Solid");  // or any default effect
+  ledEffects.applyEffect(effects[effectIndex]);
 
   Serial.println("Setup completed.");
 }
-
 // ---------------------- Loop ----------------------
 void loop() {
   unsigned long currentMillis = millis();
@@ -305,6 +301,7 @@ void loop() {
       }
     }
   }
+
   // Process ESP-NOW data
   if (espNowDataReceived) {
     espNowDataReceived = false;        // Reset the flag
@@ -325,8 +322,9 @@ void loop() {
 // ---------------------- Initialization Functions ----------------------
 void initializePreferences() {
   preferences.begin("cornhole", false);
-  if (!preferences.getBool("nvsInit", false)) {
 
+  if (!preferences.getBool("nvsInit", false)) {
+    Serial.println("📦 First-time setup: initializing preferences");
     preferences.putString("deviceRole", "MASTER");
 
     preferences.putString("ssid", "CornholeAP");
@@ -353,7 +351,6 @@ void initializePreferences() {
     preferences.putULong("irTriggerDuration", 4000);
 
     preferences.putBool("nvsInit", true);
-    Serial.println("Preferences initialized with default values.");
   }
   preferences.end();
 }
@@ -361,7 +358,7 @@ void initializePreferences() {
 void defaultPreferences() {
   preferences.begin("cornhole", false);
 
-  savedRole = preferences.getString("deviceRole");  // Default MASTER if not set
+  savedRole = preferences.getString("deviceRole", "MASTER");  // Default MASTER if not set
 
   ssid = preferences.getString("ssid");
   password = preferences.getString("password");
@@ -409,83 +406,163 @@ void defaultPreferences() {
   ledEffects.setSportsEffectColors(sportsEffectColor1, sportsEffectColor2);
 
   preferences.end();
+  deviceRole = (deviceRole == MASTER) ? MASTER : SLAVE;
 }
 
 // ---------------------- Setup WiFi ----------------------
 void setupWiFi() {
-  Serial.print("Setting up WiFi...");
-  WiFi.mode(WIFI_STA);  // Set Wi-Fi to station mode
-  WiFi.begin(ssid, password);
+  Serial.println("Setting up WiFi...");
 
-  if (deviceRole == MASTER) {
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      attempts++;
-      Serial.print(".");
-      if (attempts > 20) {
-        Serial.println("");
-        Serial.println("Switching to AP mode...");
-        WiFi.mode(WIFI_AP_STA);
-        WiFi.softAP(ssid, password);
-        Serial.println("Soft Access Point started");
-        Serial.print("Soft IP Address: ");
-        Serial.println(WiFi.softAPIP());
-        Serial.print("Soft SSID: ");
-        Serial.println(ssid);
-        ipAddress = WiFi.softAPIP().toString().c_str();
-        usingFallbackAP = "true";
-        return;
-      }
-    }
-  } else {
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(1000);
-      Serial.print(".");
-      // No need to call WiFi.begin() again here
-    }
+  const int maxAttempts = 10;  // Set number of attempts before fallback
+  int attempts = 0;
+
+  WiFi.disconnect(true);  // Clean up previous state
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid.c_str(), password.c_str());
+
+  // Common WiFi connection loop
+  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
   }
-  ipAddress = WiFi.localIP().toString().c_str();
-  Serial.println();
-  Serial.println("Connected to WiFi");
-  Serial.println("IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("Soft SSID: ");
-  Serial.println(ssid);
+
+  // Handle fallback to AP mode (MASTER only)
+  if (WiFi.status() != WL_CONNECTED && deviceRole == MASTER) {
+    Serial.println("\n❌ Failed to connect. Switching to AP mode...");
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(ssid.c_str(), password.c_str());
+
+    WiFi.disconnect(true);
+    delay(1000);
+
+    bool apStarted = WiFi.softAP(ssid.c_str(), password.c_str());
+
+    if (apStarted) {
+      usingFallbackAP = true;
+      ipAddress = WiFi.softAPIP().toString();
+      Serial.println("✅ Soft AP started");
+      Serial.print("Soft SSID: ");
+      Serial.println(ssid);
+      Serial.print("Soft IP Address: ");
+      Serial.println(ipAddress);
+    } else {
+      Serial.println("❌ Failed to start Soft AP");
+    }
+    return;
+  }
+
+  // Successfully connected
+  if (WiFi.status() == WL_CONNECTED) {
+    usingFallbackAP = false;
+    ipAddress = WiFi.localIP().toString();
+    Serial.println("\n✅ Connected to WiFi");
+    Serial.print("SSID: ");
+    Serial.println(ssid);
+    Serial.print("IP Address: ");
+    Serial.println(ipAddress);
+  }
 }
 
 // ---------------------- Setup ESP-NOW ----------------------
-void printMacAddress() {
-  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);  // Retrieve MAC address using esp_read_mac
-
-  Serial.print("Device MAC Address: ");
-  for (int i = 0; i < 6; i++) {
-    Serial.printf("%02X", deviceMAC[i]);
-    if (i < 5) Serial.print(":");
-  }
-  Serial.println();
-}
 
 void setupEspNow() {
   if (esp_now_init() != ESP_OK) {
-    return;
+    Serial.println("❌ ESP-NOW init failed");
+    //return;
   }
+  Serial.println("✅ ESP-NOW initialized");
+
+  // Always register callbacks after init
   esp_now_register_recv_cb(onDataRecv);
-  esp_now_register_send_cb(onDataSent);
+  //esp_now_register_send_cb(onDataSent);
 
-  esp_now_peer_info_t peerInfo;
-  memset(&peerInfo, 0, sizeof(peerInfo));
-  memcpy(peerInfo.peer_addr, peerMAC, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-  peerInfo.ifidx = WIFI_IF_STA;
-
-  if (esp_now_is_peer_exist(peerMAC)) {
-    esp_now_del_peer(peerMAC);
+  // Add broadcast peer if needed
+  esp_now_peer_info_t broadcastInfo = {};
+  //memset(&broadcastInfo, 0, sizeof(broadcastInfo));
+  memcpy(broadcastInfo.peer_addr, broadcastMAC, 6);
+  broadcastInfo.channel = 0;
+  broadcastInfo.encrypt = false;
+  broadcastInfo.ifidx = WIFI_IF_STA;
+  if (!esp_now_is_peer_exist(broadcastMAC)) {
+    if (esp_now_add_peer(&broadcastInfo) == ESP_OK) {
+      Serial.println("Broadcast peer added");
+    } else {
+      Serial.println("❌ Failed to add broadcast peer");
+    }
   }
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-  } else {
-    Serial.println("Peer added successfully");
+}
+
+// ---------------------- Role Resolution ----------------------
+void saveNewRole(const String &role) {
+  preferences.begin("cornhole", false);
+  preferences.putString("deviceRole", role);
+  preferences.end();
+  Serial.println("Saved Role: " + role);
+  deviceRole = (deviceRole == MASTER) ? MASTER : SLAVE;
+}
+
+void resolveRole() {
+  //delay(1000);
+  String announce = "ROLE: " + savedRole;
+  esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)announce.c_str(), announce.length());
+  Serial.println("📣 Broadcasting role: " + announce);
+  if (result != ESP_OK) {
+    Serial.println("❌ Failed to send ESP-NOW broadcast!");
+  }
+
+  unsigned long startTime = millis();
+
+  while (millis() - startTime < 2000) {
+    if (espNowDataReceived) {
+      espNowDataReceived = false;
+      String msg = espNowDataBuffer;
+      espNowDataBuffer = "";
+
+      if (msg.startsWith("ROLE: ")) {
+        roleMessageSeen = true;
+        setupRole = msg.substring(6);
+
+        if (setupRole == savedRole) {
+          String response = "We are both: " + savedRole;
+          Serial.println("⚠️ Conflict detected. Responding with: " + response);
+          esp_now_send(broadcastMAC, (uint8_t *)response.c_str(), response.length());
+        } else {
+          String response = "We are different roles: ";
+          esp_now_send(broadcastMAC, (uint8_t *)response.c_str(), response.length());
+          Serial.println("👋 The other board is: " + setupRole);
+        }
+      } else if (msg.startsWith("We are both:")) {
+        roleMessageSeen = true;
+        setupRole = msg.substring(13);
+        Serial.println("🤝 Conflict detected: both boards are " + setupRole);
+
+        if (setupRole == "MASTER") {
+          savedRole = "SLAVE";
+        } else {
+          savedRole = "MASTER";
+        }
+        saveNewRole(savedRole);
+
+      } else if (msg.startsWith("We are different roles")) {
+        roleMessageSeen = true;  // Prevent fallback promotion
+        Serial.println("🤝 Role resolution completed with: " + msg);
+      }
+    }
+  }
+  // ⏰ Fallback if no one responded and we're a SLAVE
+  if (!roleMessageSeen && savedRole == "SLAVE") {
+    Serial.println("⏰ No MASTER found, promoting to MASTER");
+    savedRole = "MASTER";
+    saveNewRole(savedRole);
+  }
+}
+
+void printPeers() {
+  Serial.println("🧩 Known peers:");
+  for (int i = 0; i < peerCount; i++) {
+    Serial.println("  → " + macToString(knownPeers[i]));
   }
 }
 
@@ -565,90 +642,90 @@ void setupOta() {
 }
 
 // ---------------------- Setup Web Server (MASTER only) ----------------------
-void setupWebServer() {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    Serial.println("Root page accessed");
-    String html = "<html><body><h1>Cornhole Admin Panel</h1>";
-    html += "<form action='/setColor' method='GET'>";
-    html += "Color (RGB): <input type='text' name='r' placeholder='Red'> ";
-    html += "<input type='text' name='g' placeholder='Green'> ";
-    html += "<input type='text' name='b' placeholder='Blue'><br>";
-    html += "<button type='submit'>Set Color</button></form><br>";
+// void setupWebServer() {
+//   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+//     Serial.println("Root page accessed");
+//     String html = "<html><body><h1>Cornhole Admin Panel</h1>";
+//     html += "<form action='/setColor' method='GET'>";
+//     html += "Color (RGB): <input type='text' name='r' placeholder='Red'> ";
+//     html += "<input type='text' name='g' placeholder='Green'> ";
+//     html += "<input type='text' name='b' placeholder='Blue'><br>";
+//     html += "<button type='submit'>Set Color</button></form><br>";
 
-    html += "<form action='/setEffect' method='GET'>";
-    html += "Effect: <select name='effect'>";
-    for (int i = 0; i < (sizeof(effects) / sizeof(effects[0])); i++) {
-      html += "<option value='" + String(i) + "'>" + effects[i] + "</option>";
-    }
-    html += "</select><br>";
-    html += "<button type='submit'>Set Effect</button></form><br>";
+//     html += "<form action='/setEffect' method='GET'>";
+//     html += "Effect: <select name='effect'>";
+//     for (int i = 0; i < (sizeof(effects) / sizeof(effects[0])); i++) {
+//       html += "<option value='" + String(i) + "'>" + effects[i] + "</option>";
+//     }
+//     html += "</select><br>";
+//     html += "<button type='submit'>Set Effect</button></form><br>";
 
-    html += "<form action='/setBrightness' method='GET'>";
-    html += "Brightness (0-255): <input type='text' name='brightness'><br>";
-    html += "<button type='submit'>Set Brightness</button></form><br>";
+//     html += "<form action='/setBrightness' method='GET'>";
+//     html += "Brightness (0-255): <input type='text' name='brightness'><br>";
+//     html += "<button type='submit'>Set Brightness</button></form><br>";
 
-    html += "</body></html>";
-    request->send(200, "text/html", html);
-  });
+//     html += "</body></html>";
+//     request->send(200, "text/html", html);
+//   });
 
-  // Set Color Handler
-  server.on("/setColor", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (request->hasParam("r") && request->hasParam("g") && request->hasParam("b")) {
-      int r = request->getParam("r")->value().toInt();
-      int g = request->getParam("g")->value().toInt();
-      int b = request->getParam("b")->value().toInt();
-      currentColor = CRGB(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
-      ledEffects.setColor(currentColor);
-      sendData("espNow", "COLOR", String(r) + "," + String(g) + "," + String(b));
-      if (deviceRole == MASTER) {
-        sendData("app", "COLOR", String(r) + "," + String(g) + "," + String(b));
-      }
-      request->send(200, "text/plain", "Color updated to: R=" + String(r) + " G=" + String(g) + " B=" + String(b));
-    } else {
-      request->send(400, "text/plain", "Missing parameters");
-    }
-  });
+//   // Set Color Handler
+//   server.on("/setColor", HTTP_GET, [](AsyncWebServerRequest *request) {
+//     if (request->hasParam("r") && request->hasParam("g") && request->hasParam("b")) {
+//       int r = request->getParam("r")->value().toInt();
+//       int g = request->getParam("g")->value().toInt();
+//       int b = request->getParam("b")->value().toInt();
+//       currentColor = CRGB(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
+//       ledEffects.setColor(currentColor);
+//       sendData("espNow", "COLOR", String(r) + "," + String(g) + "," + String(b));
+//       if (deviceRole == MASTER) {
+//         sendData("app", "COLOR", String(r) + "," + String(g) + "," + String(b));
+//       }
+//       request->send(200, "text/plain", "Color updated to: R=" + String(r) + " G=" + String(g) + " B=" + String(b));
+//     } else {
+//       request->send(400, "text/plain", "Missing parameters");
+//     }
+//   });
 
-  // Set Effect Handler
-  server.on("/setEffect", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (request->hasParam("effect")) {
-      int effectIdx = request->getParam("effect")->value().toInt();
-      if (effectIdx >= 0 && effectIdx < (sizeof(effects) / sizeof(effects[0]))) {
-        effectIndex = effectIdx;
-        ledEffects.applyEffect(effects[effectIndex]);
-        sendData("espNow", "Effect", effects[effectIndex]);
-        if (deviceRole == MASTER) {
-          sendData("app", "Effect", effects[effectIndex]);
-        }
-        request->send(200, "text/plain", "Effect updated to: " + effects[effectIdx]);
-      } else {
-        request->send(400, "text/plain", "Invalid effect index");
-      }
-    } else {
-      request->send(400, "text/plain", "Missing effect parameter");
-    }
-  });
+//   // Set Effect Handler
+//   server.on("/setEffect", HTTP_GET, [](AsyncWebServerRequest *request) {
+//     if (request->hasParam("effect")) {
+//       int effectIdx = request->getParam("effect")->value().toInt();
+//       if (effectIdx >= 0 && effectIdx < (sizeof(effects) / sizeof(effects[0]))) {
+//         effectIndex = effectIdx;
+//         ledEffects.applyEffect(effects[effectIndex]);
+//         sendData("espNow", "Effect", effects[effectIndex]);
+//         if (deviceRole == MASTER) {
+//           sendData("app", "Effect", effects[effectIndex]);
+//         }
+//         request->send(200, "text/plain", "Effect updated to: " + effects[effectIdx]);
+//       } else {
+//         request->send(400, "text/plain", "Invalid effect index");
+//       }
+//     } else {
+//       request->send(400, "text/plain", "Missing effect parameter");
+//     }
+//   });
 
-  // Set Brightness Handler
-  server.on("/setBrightness", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (request->hasParam("brightness")) {
-      int brightnessValue = request->getParam("brightness")->value().toInt();
-      brightness = constrain(brightnessValue, 0, 255);
-      FastLED.setBrightness(brightness);
-      FastLED.show();
-      sendData("espNow", "BRIGHTNESS", String(brightness));
-      if (deviceRole == MASTER) {
-        sendData("app", "BRIGHTNESS", String(brightness));
-      }
-      request->send(200, "text/plain", "Brightness updated to: " + String(brightness));
-    } else {
-      request->send(400, "text/plain", "Missing brightness parameter");
-    }
-  });
+//   // Set Brightness Handler
+//   server.on("/setBrightness", HTTP_GET, [](AsyncWebServerRequest *request) {
+//     if (request->hasParam("brightness")) {
+//       int brightnessValue = request->getParam("brightness")->value().toInt();
+//       brightness = constrain(brightnessValue, 0, 255);
+//       FastLED.setBrightness(brightness);
+//       FastLED.show();
+//       sendData("espNow", "BRIGHTNESS", String(brightness));
+//       if (deviceRole == MASTER) {
+//         sendData("app", "BRIGHTNESS", String(brightness));
+//       }
+//       request->send(200, "text/plain", "Brightness updated to: " + String(brightness));
+//     } else {
+//       request->send(400, "text/plain", "Missing brightness parameter");
+//     }
+//   });
 
-  server.begin();
-  Serial.println("HTTP Server started");
-}
+//   server.begin();
+//   Serial.println("HTTP Server started");
+// }
 
 // ---------------------- Data Handling Functions ----------------------
 void handleBluetoothData(String command) {
@@ -666,7 +743,9 @@ void handleBluetoothData(String command) {
     if (completeCommand.startsWith("SET_ROLE:SLAVE")) {
 
     } else {
-      esp_err_t result = esp_now_send(peerMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
+      esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
+      Serial.printf("📤ESP-NOW Sending by %s: %s %s\n", macToString(hostMAC).c_str(), completeCommand.c_str(),
+                    result == ESP_OK ? "✅" : "❌");
     }
     //sendData("espNow", completeCommand, "");
 
@@ -686,10 +765,6 @@ void processCommand(String command) {
     esp_err_t result = esp_now_send(peerMAC, (uint8_t *)message, strlen(message));
     Serial.println("All saved variables cleared.");
     delay(3000);
-    preferences.begin("cornhole", false);
-    preferences.clear();
-    preferences.putBool("nvsInit", false);
-    preferences.end();
     sendRestartCommand();
     lastEspNowMessage = "";
     lastAppMessage = "";
@@ -806,7 +881,7 @@ void processCommand(String command) {
 
   } else if (command.startsWith("toggleWiFi")) {
     String status = command.substring(11);
-    bool wifiStatus = (status == "on");
+    bool wifiStatus = (status == "off");
     toggleWiFi(wifiStatus);
     Serial.println("WiFi toggled to: " + String(status));
 
@@ -856,6 +931,7 @@ void processCommand(String command) {
     ESP.restart();
 
   } else if (command.startsWith("UPDATE")) {
+    setupWiFi();
     // Handle OTA updates or other update commands
     // Example: startOtaUpdate(command.substring(7));
     Serial.println("Update command received.");
@@ -884,8 +960,8 @@ void sendBoardInfo() {
     sprintf(data, "r1:%s;n1:%s;m1:%02x:%02x:%02x:%02x:%02x:%02x;i1:%s;l1:%d;v1:%d",
             "MASTER",
             board1Name.c_str(),
-            deviceMAC[0], deviceMAC[1], deviceMAC[2],
-            deviceMAC[3], deviceMAC[4], deviceMAC[5],
+            hostMAC[0], hostMAC[1], hostMAC[2],
+            hostMAC[3], hostMAC[4], hostMAC[5],
             ipAddress.c_str(),
             readBatteryLevel(),
             (int)readBatteryVoltage());
@@ -896,8 +972,8 @@ void sendBoardInfo() {
     sprintf(data, "r2:%s;n2:%s;m2:%02x:%02x:%02x:%02x:%02x:%02x;i2:%s;l2:%d;v2:%d",
             "SLAVE",
             board2Name.c_str(),
-            deviceMAC[0], deviceMAC[1], deviceMAC[2],
-            deviceMAC[3], deviceMAC[4], deviceMAC[5],
+            hostMAC[0], hostMAC[1], hostMAC[2],
+            hostMAC[3], hostMAC[4], hostMAC[5],
             ipAddress.c_str(),
             readBatteryLevel(),
             (int)readBatteryVoltage());
@@ -909,26 +985,89 @@ void sendBoardInfo() {
 
 // ---------------------- BLE and ESP-NOW Callbacks ----------------------
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
-  if (memcmp(info->src_addr, deviceMAC, 6) == 0) {
-    // Message sent from self, ignore
-    Serial.println("Received own message via ESP-NOW, ignoring.");
+  String receivedData = String((char *)incomingData).substring(0, len);
+  const uint8_t *senderMAC = info->src_addr;
+
+  if (receivedData == lastEspNowMessage) return;
+  lastEspNowMessage = receivedData;
+
+
+  // Only track role messages for election timing
+  if (receivedData.startsWith("ROLE:")) {
+    roleMessageSeen = true;
+    setupRole = receivedData.substring(6);
+
+    if (setupRole == savedRole) {
+      String response = "We are both: " + savedRole;
+      esp_now_send(broadcastMAC, (uint8_t *)response.c_str(), response.length());
+      Serial.println("⚠️ Conflict detected. Responded with: " + response);
+    } else {
+      String response = "We are different roles";
+      esp_now_send(broadcastMAC, (uint8_t *)response.c_str(), response.length());
+      Serial.println("👋 Received role broadcast from peer: " + setupRole);
+    }
     return;
   }
 
-  char msg[256];
-  snprintf(msg, sizeof(msg), "Data received from: %02x:%02x:%02x:%02x:%02x:%02x", info->src_addr[0], info->src_addr[1], info->src_addr[2], info->src_addr[3], info->src_addr[4], info->src_addr[5]);
+  if (receivedData.startsWith("We are both: ")) {
+    roleMessageSeen = true;
+    setupRole = receivedData.substring(13);
+    if (setupRole == "MASTER") {
+      savedRole = "SLAVE";
+      Serial.println("🔧 Changed Role to: " + savedRole);
+      saveNewRole(savedRole);
+      String newAnnounce = "ROLE: " + savedRole;
+      //esp_now_send(broadcastMAC, (uint8_t *)newAnnounce.c_str(), newAnnounce.length());
+      //Serial.println("📣 Rebroadcasting new role: " + newAnnounce);
+      return;
+    }
+    return;
+  }
 
-  String receivedData = String((char *)incomingData).substring(0, len);
+  if (receivedData.startsWith("We are different")) {
+    roleMessageSeen = true;
+    Serial.println("🛑 Role resolution id done!!");
+    return;
+  }
+
+
+  // Register new peer MAC
+  bool known = false;
+  for (int i = 0; i < peerCount; i++) {
+    if (memcmp(info->src_addr, knownPeers[i], 6) == 0) {
+      known = true;
+      break;
+    }
+  }
+
+  if (!known && peerCount < MAX_PEERS) {
+    memcpy(knownPeers[peerCount], info->src_addr, 6);
+    peerCount++;
+    memcpy(peerMAC, info->src_addr, 6);  // Set as peer
+    Serial.println("🔗 New peer: " + macToString(peerMAC));
+    printPeers();
+
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(peerInfo.peer_addr, peerMAC, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+    esp_now_add_peer(&peerInfo);
+  }
+
+  // If received structured message
+  if (len == sizeof(struct_message)) {
+    memcpy(&board2, incomingData, sizeof(board2));
+    board2DataReceived = true;
+    //return;
+  }
+
+  // Otherwise handle as a normal string command
+  espNowDataBuffer = receivedData;
+  espNowDataReceived = true;
   Serial.println("Received data: " + receivedData);
 
-  if (len == sizeof(struct_message)) {
-    // Received data is a struct_message
-    memcpy(&board2, incomingData, sizeof(board2));
-    board2DataReceived = true;  // Set the flag
-  } else {
-    // Received data is a String message
-    espNowDataBuffer = String((char *)incomingData).substring(0, len);
-    espNowDataReceived = true;  // Set the flag
+  // Forward to app if MASTER
+  if (deviceRole == MASTER) {
     sendData("app", receivedData, "");
   }
 }
@@ -960,6 +1099,8 @@ String macToString(const uint8_t *mac) {
   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   return String(macStr);
+  Serial.print("📡 This device MAC: ");
+  Serial.println(macToString(hostMAC));
 }
 
 // ---------------------- Communication Functions ----------------------
@@ -986,19 +1127,36 @@ void sendSettings() {
 }
 
 void sendData(const String &device, const String &type, const String &data) {
+  if (!espNowEnabled) {
+    Serial.println("🚫 ESP-NOW not enabled! Cannot send.");
+    return;
+  }
+
+  if (!esp_now_is_peer_exist(broadcastMAC)) {
+    setupEspNow();  // This safely reinitializes if needed
+  }
+
+
   char messageBuffer[250];
   String currentMessage;
 
   if (device == "espNow") {
     snprintf(messageBuffer, sizeof(messageBuffer), "%s:%s", type.c_str(), data.c_str());
-    String currentMessage = String(messageBuffer);
+    currentMessage = String(messageBuffer);
 
-    // Check if the current message is different from the last sent message
     if (currentMessage != lastEspNowMessage) {
-      esp_now_send(peerMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
-      Serial.println("Sending to ESP-NOW: " + currentMessage);
+      for (int i = 0; i < peerCount; i++) {
+        if (!esp_now_is_peer_exist(knownPeers[i])) {
+          Serial.println("🚫 Peer not known: " + macToString(knownPeers[i]));
+          continue;
+        }
 
-      // Update the last sent message
+        esp_err_t result = esp_now_send(knownPeers[i], (uint8_t *)currentMessage.c_str(), currentMessage.length());
+        Serial.printf("📤ESP-NOW Sending by %s: %s %s\n",
+                      macToString(hostMAC).c_str(),
+                      currentMessage.c_str(),
+                      result == ESP_OK ? "✅" : "❌");
+      }
       lastEspNowMessage = currentMessage;
     } else {
       Serial.println("Duplicate ESP-NOW message detected. Skipping send.");
@@ -1026,7 +1184,7 @@ void sendData(const String &device, const String &type, const String &data) {
 }
 
 void updateBluetoothData(String data) {
-  if (deviceRole != MASTER) return;  // Only MASTER handles BLE updates
+  if (deviceRole != MASTER || pCharacteristic == nullptr) return;  // Prevent crash
 
   const int maxChunkSize = 20;                                             // Maximum BLE payload size is 20 bytes
   String message = data;                                                   // Full message to send
@@ -1074,20 +1232,15 @@ void doubleClick() {
   Serial.println("Double Click: Effect changed to " + effects[effectIndex]);
 }
 
-void longPressStart() {
+void longPress() {
   toggleLights(!lightsOn);
-
-  String message = String(lightsOn ? "on" : "off");
   sendData("espNow", "toggleLights", lightsOn ? "on" : "off");
-  if (deviceRole == MASTER) {
-  }
-  Serial.println("Long Press: Lights turned " + message);
-}
 
-void longPressStop() {
-  // Log stop for debugging, if needed
-  sendData("app", "toggleLights", lightsOn ? "on" : "off");
-  Serial.println("Long Press Released");
+  if (deviceRole == MASTER) {
+    sendData("app", "toggleLights", lightsOn ? "on" : "off");
+  }
+
+  Serial.println("Long Press: Lights turned " + String(lightsOn ? "on" : "off"));
 }
 
 // ---------------------- Utility Functions ----------------------
@@ -1105,7 +1258,6 @@ void toggleWiFi(bool status) {
   if (wifiEnabled) {
     Serial.println("WiFi enabled");
     setupWiFi();
-    setupEspNow();
   } else {
     Serial.println("WiFi disabled");
     WiFi.disconnect();
@@ -1117,6 +1269,7 @@ void toggleEspNow(bool status) {
   espNowEnabled = status;
   if (espNowEnabled) {
     Serial.println("ESP-NOW enabled");
+    esp_now_deinit();  // Ensure clean reinit
     setupEspNow();
   } else {
     Serial.println("ESP-NOW disabled");
@@ -1128,7 +1281,7 @@ void btPairing() {
   if (!deviceConnected) {
     if (deviceRole == MASTER) {
       pServer->startAdvertising();  // restart advertising
-      Serial.println("BLE in pairing mode");
+      //Serial.println("BLE in pairing mode");
     }
     oldDeviceConnected = deviceConnected;
     deviceConnected = false;

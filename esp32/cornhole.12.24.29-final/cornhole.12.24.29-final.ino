@@ -539,26 +539,28 @@ void printMacAddress() {
 
 void setupEspNow() {
   if (esp_now_init() != ESP_OK) {
+    Serial.println("❌ ESP-NOW init failed");
     return;
   }
+  Serial.println("✅ ESP-NOW initialized");
+
   esp_now_register_recv_cb(onDataRecv);
   esp_now_register_send_cb(onDataSent);
 
-  esp_now_peer_info_t peerInfo;
-  memset(&peerInfo, 0, sizeof(peerInfo));
-  memcpy(peerInfo.peer_addr, peerMAC, 6);
+  // Add broadcast peer
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
   peerInfo.ifidx = WIFI_IF_STA;
+  if (!esp_now_is_peer_exist(broadcastAddress)) {
+    if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+      Serial.println("📡 Broadcast peer added");
+    } else {
+      Serial.println("❌ Failed to add broadcast peer");
+    }
+  }
 
-  if (esp_now_is_peer_exist(peerMAC)) {
-    esp_now_del_peer(peerMAC);
-  }
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-  } else {
-    Serial.println("Peer added successfully");
-  }
-}
 
 // ---------------------- Setup BLE (MASTER only) ----------------------
 void setupBT() {

@@ -156,14 +156,12 @@ int previousBrightness;
 
 // ---------------------- Function Declarations ----------------------
 void setupWiFi();
-void printMacAddress();
 void setupEspNow();
 void setupBT();
 void setupOta();
 void setupWebServer();
 void initializePreferences();
 void defaultPreferences();
-void announceRole(String role);
 void handleBluetoothData(String data);
 void updateBluetoothData(String data);
 void onDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len);
@@ -223,19 +221,20 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting setup...");
 
+  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
+  memcpy(hostMAC, deviceMAC, 6);
+  
   preferences.begin("cornhole", false);
   if (!preferences.getBool("nvsInit", false)) {
     initializePreferences();
   }
+  defaultPreferences();
   preferences.end();
 
-  defaultPreferences();
-  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);
-  memcpy(hostMAC, deviceMAC, 6);
   WiFi.disconnect(true);
   delay(100);
   WiFi.mode(WIFI_STA);
-  delay(2000);
+  delay(random(300,2000));
   setupEspNow();
   String announceMsg = "ROLE:" + savedRole;
   esp_now_send(broadcastMAC, (uint8_t *)announceMsg.c_str(), announceMsg.length());
@@ -277,8 +276,6 @@ void setup() {
       delay(200);
     }
   }
-
-  esp_read_mac(hostMAC, ESP_MAC_WIFI_STA);
 
   Serial.println("Device Role: " + savedRole);
   setupWiFi();
@@ -352,6 +349,7 @@ void loop() {
 void initializePreferences() {
   preferences.begin("cornhole", false);
 
+  preferences.putBool("nvsInit", true);
   preferences.putString("deviceRole", "MASTER");
 
   preferences.putString("ssid", "CornholeAP");
@@ -436,14 +434,6 @@ void defaultPreferences() {
   preferences.end();
 }
 
-void announceRole(String role) {
-  String msg = String("ROLE:") + role;
-  esp_err_t result = esp_now_send(deviceMAC, (uint8_t *)msg.c_str(), msg.length());
-
-  Serial.printf("📤 Sent by %s: %s %s\n", macToString(deviceMAC).c_str(), msg.c_str(),
-                result == ESP_OK ? "✅" : "❌");
-}
-
 // ---------------------- Setup WiFi ----------------------
 void setupWiFi() {
   Serial.println("Setting up WiFi...");
@@ -500,16 +490,6 @@ void setupWiFi() {
 }
 
 // ---------------------- Setup ESP-NOW ----------------------
-void printMacAddress() {
-  esp_read_mac(deviceMAC, ESP_MAC_WIFI_STA);  // Retrieve MAC address using esp_read_mac
-
-  Serial.print("Device MAC Address: ");
-  for (int i = 0; i < 6; i++) {
-    Serial.printf("%02X", deviceMAC[i]);
-    if (i < 5) Serial.print(":");
-  }
-  Serial.println();
-}
 
 void setupEspNow() {
   if (esp_now_init() != ESP_OK) {
@@ -522,27 +502,7 @@ void setupEspNow() {
   esp_now_register_recv_cb(onDataRecv);
   esp_now_register_send_cb(onDataSent);
 
-  // Add specific peer (the other board)
-  esp_now_peer_info_t peerInfo = {};
-  memset(&peerInfo, 0, sizeof(peerInfo));
-  memcpy(peerInfo.peer_addr, peerMAC, 6);  // Use peerMAC (not broadcast)
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-  peerInfo.ifidx = WIFI_IF_STA;
-
-  if (esp_now_is_peer_exist(peerMAC)) {
-    esp_now_del_peer(peerMAC);
-    Serial.println("Old peer removed");
-  }
-
-  if (esp_now_add_peer(&peerInfo) == ESP_OK) {
-    Serial.print("Peer added: ");
-    Serial.println(macToString(peerMAC));
-  } else {
-    Serial.println("❌ Failed to add peer");
-  }
-
-  // (Optional) Add broadcast peer if needed
+  // Add broadcast peer if needed
   esp_now_peer_info_t broadcastInfo = {};
   memset(&broadcastInfo, 0, sizeof(broadcastInfo));
   memcpy(broadcastInfo.peer_addr, broadcastMAC, 6);

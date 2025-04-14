@@ -244,7 +244,7 @@ class SetupScreenState extends State<SetupScreen> {
     });
   }
 
-  void sendColorToMaster(String colorName, Color color) {
+  void sendColorToPrimary(String colorName, Color color) {
     int red = (color.value >> 16) & 0xFF;
     int green = (color.value >> 8) & 0xFF;
     int blue = (color.value) & 0xFF;
@@ -282,7 +282,7 @@ class SetupScreenState extends State<SetupScreen> {
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        homeScreenState!.sendCommand('SET_ROLE:SLAVE;');
+        homeScreenState!.sendCommand('SET_ROLE:SECONDARY;');
         logger.i("Sent command to change roles on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");
@@ -670,11 +670,12 @@ class SetupScreenState extends State<SetupScreen> {
             color: Colors.blue,
             thickness: 2,
           ),
-buildColorPicker("Initial Startup Color", initialStartupColor, (color) {
-  setState(() {
-    initialStartupColor = color; // Update the color
-  });
-}),
+          buildColorPicker("Initial Startup Color", initialStartupColor,
+              (color) {
+            setState(() {
+              initialStartupColor = color; // Update the color
+            });
+          }),
           const SizedBox(height: 20),
           const Divider(
             color: Colors.blue,
@@ -967,123 +968,125 @@ buildColorPicker("Initial Startup Color", initialStartupColor, (color) {
     );
   }
 
-Widget buildColorPicker(String label, Color currentColor, ValueChanged<Color> onColorChanged) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 10),
-
-      // Circular Color Picker Button
-      GestureDetector(
-        onTap: () async {
-          // Ensure current color is set correctly
-          Color pickedColor = currentColor;
-
-          Color? selectedColor = await showDialog<Color>(
-            context: context,
-            builder: (context) {
-              return AlertDialog(
-                title: Text("Pick a Color for $label"),
-                content: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      // Quick Selection of Preset Colors
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: predefinedColors.map((color) {
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).pop(color);
-                            },
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: color == pickedColor ? Colors.black : Colors.transparent,
-                                  width: 3,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Full Color Picker for Custom Selection
-                      ColorPicker(
-                        pickerColor: pickedColor,
-                        onColorChanged: (color) {
-                          pickedColor = color;
-                        },
-                        showLabel: true,
-                        pickerAreaHeightPercent: 0.5,
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    child: const Text("Cancel"),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  TextButton(
-                    child: const Text("Select"),
-                    onPressed: () {
-                      Navigator.of(context).pop(pickedColor);
-                    },
-                  ),
-                ],
-              );
-            },
-          );
-
-          if (selectedColor != null) {
-            // Update UI and set new color
-            setState(() {
-              onColorChanged(selectedColor);
-            });
-          }
-        },
-        child: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: currentColor, // Always shows the latest color
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(width: 2, color: Colors.black),
+  Widget buildColorPicker(
+      String label, Color currentColor, ValueChanged<Color> onColorChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
           ),
         ),
-      ),
-    ],
-  );
-}
+        const SizedBox(height: 10),
+
+        // Circular Color Picker Button
+        GestureDetector(
+          onTap: () async {
+            // Ensure current color is set correctly
+            Color pickedColor = currentColor;
+
+            Color? selectedColor = await showDialog<Color>(
+              context: context,
+              builder: (context) {
+                return AlertDialog(
+                  title: Text("Pick a Color for $label"),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        // Quick Selection of Preset Colors
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: predefinedColors.map((color) {
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).pop(color);
+                              },
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: color == pickedColor
+                                        ? Colors.black
+                                        : Colors.transparent,
+                                    width: 3,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Full Color Picker for Custom Selection
+                        ColorPicker(
+                          pickerColor: pickedColor,
+                          onColorChanged: (color) {
+                            pickedColor = color;
+                          },
+                          showLabel: true,
+                          pickerAreaHeightPercent: 0.5,
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      child: const Text("Cancel"),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    TextButton(
+                      child: const Text("Select"),
+                      onPressed: () {
+                        Navigator.of(context).pop(pickedColor);
+                      },
+                    ),
+                  ],
+                );
+              },
+            );
+
+            if (selectedColor != null) {
+              // Update UI and set new color
+              setState(() {
+                onColorChanged(selectedColor);
+              });
+            }
+          },
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: currentColor, // Always shows the latest color
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(width: 2, color: Colors.black),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
 // List of predefined colors for quick selection
-final List<Color> predefinedColors = [
-  Colors.red,
-  Colors.blue,
-  Colors.green,
-  Colors.yellow,
-  Colors.orange,
-  Colors.purple,
-  Colors.cyan,
-  Colors.pink,
-  Colors.teal,
-  Colors.brown,
-  Colors.white,
-  Colors.black,
-];
-
+  final List<Color> predefinedColors = [
+    Colors.red,
+    Colors.blue,
+    Colors.green,
+    Colors.yellow,
+    Colors.orange,
+    Colors.purple,
+    Colors.cyan,
+    Colors.pink,
+    Colors.teal,
+    Colors.brown,
+    Colors.white,
+    Colors.black,
+  ];
 }

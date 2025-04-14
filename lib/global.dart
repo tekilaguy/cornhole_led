@@ -19,7 +19,7 @@ bool isReconnecting = false;
 // Connection and device status
 bool isConnected = false;
 String connectedDevice = '';
-bool wifiEnabled = true;
+bool wifiEnabled = false;
 bool lightsOn = true;
 bool espNowEnabled = true;
 int activeColorIndex = 0;
@@ -30,7 +30,7 @@ String connectionInfo = '';
 int brightness = 50;
 
 // Variables for Board 1
-String boardRole1 = 'MASTER';
+String boardRole1 = 'PRIMARY';
 String nameBoard1 = '';
 String macAddrBoard1 = '';
 String ipAddrBoard1 = '';
@@ -38,7 +38,7 @@ int batteryVoltageBoard1 = 0;
 int batteryLevelBoard1 = 0;
 
 // Variables for Board 2
-String boardRole2 = 'SLAVE';
+String boardRole2 = 'SECONDARY';
 String nameBoard2 = '';
 String macAddrBoard2 = '';
 String ipAddrBoard2 = '';
