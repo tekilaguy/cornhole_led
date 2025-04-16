@@ -453,7 +453,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   void sendLargeMessage(
       BluetoothCharacteristic characteristic, String message) async {
-    int chunkSize = 20;
+    int chunkSize = 100;
     int messageLength = message.length;
     int totalChunks = (messageLength + chunkSize - 1) ~/ chunkSize;
 

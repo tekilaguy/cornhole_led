@@ -71,7 +71,7 @@ class InfoScreenState extends State<InfoScreen> {
   }
 
   void updateOta() {
-    homeScreenState?.sendCommand("UPDATE;");
+    homeScreenState?.sendCommand('UPDATE:$url;');
   }
 
   void restartBoards() async {

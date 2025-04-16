@@ -19,7 +19,7 @@ bool isReconnecting = false;
 // Connection and device status
 bool isConnected = false;
 String connectedDevice = '';
-bool wifiEnabled = false;
+bool wifiEnabled = true;
 bool lightsOn = true;
 bool espNowEnabled = true;
 int activeColorIndex = 0;
@@ -74,6 +74,9 @@ InfoScreenState? infoScreenState;
 
 const String getSettingsCommand = "GET_SETTINGS;";
 const String toggleWiFiCommand = "toggleWiFi:";
+
+//OTA Variables
+String url = "https://github.com/tekilaguy/cornhole_led/tree/main/updates";
 
 // Color options
 List<Color> colors = [
