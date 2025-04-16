@@ -76,7 +76,7 @@ const String getSettingsCommand = "GET_SETTINGS;";
 const String toggleWiFiCommand = "toggleWiFi:";
 
 //OTA Variables
-String url = "https://github.com/tekilaguy/cornhole_led/tree/main/updates";
+String url = "https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates";
 
 // Color options
 List<Color> colors = [
