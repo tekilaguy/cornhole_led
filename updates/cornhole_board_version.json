@@ -1,3 +1,4 @@
-"version":"1.0.9"
-"bin":"cornhole_board.bin"
+{"version":"1.0.9",
+"bin":"cornhole_board.bin",
 "file_url":"https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates"
+}
