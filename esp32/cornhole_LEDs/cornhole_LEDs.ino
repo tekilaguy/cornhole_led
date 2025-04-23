@@ -102,8 +102,8 @@ int chasePosition = 0;
 String currentEffect = "Solid";
 
 LEDEffects ledEffects(
-  ringLeds,
-  boardLeds,
+  ringLeds, NUM_LEDS_RING,
+  boardLeds, NUM_LEDS_BOARD,
   brightness,
   effectSpeed,
   blockSize,

@@ -49,7 +49,7 @@ bool roleMessageSeen = false;
 String ipAddress;
 
 // Web Server (only for PRIMARY)
-AsyncWebServer server(80);
+AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
 #define RING_LED_PIN 2
@@ -65,8 +65,8 @@ CRGB ringLeds[NUM_LEDS_RING];
 CRGB boardLeds[NUM_LEDS_BOARD];
 
 // ---------------------- Button and Sensors ----------------------
-#define BUTTON_PIN 14
-#define SENSOR_PIN 12
+#define BUTTON_PIN 12
+#define SENSOR_PIN 14
 #define BATTERY_PIN 35
 
 // Button Setup
@@ -111,8 +111,8 @@ int chasePosition = 0;
 String currentEffect = "Solid";
 
 LEDEffects ledEffects(
-  ringLeds,
-  boardLeds,
+  ringLeds, NUM_LEDS_RING,
+  boardLeds, NUM_LEDS_BOARD,
   brightness,
   effectSpeed,
   blockSize,
@@ -242,8 +242,9 @@ void setup() {
   initializePreferences();
   defaultPreferences();
   WiFi.disconnect(true);
+  setupWiFi();
   delay(100);
-  WiFi.mode(WIFI_AP_STA);
+  //WiFi.mode(WIFI_AP_STA);
   esp_wifi_set_promiscuous(true);  // <-- Required before setting channel
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
   esp_wifi_set_promiscuous(false);  // <-- Restore normal state
@@ -260,10 +261,9 @@ void setup() {
 
   if (savedRole == "PRIMARY") {
     setupBT();
-    setupOta();
+    //setupOta();
     //setupWebServer();
   }
-  setupWiFi();
 
   SPIFFS.begin(true);
   server.begin();
@@ -428,10 +428,10 @@ void setupWiFi() {
   const int maxAttempts = 10;  // Set number of attempts before fallback
   int attempts = 0;
 
-  WiFi.disconnect(true);  // Clean up previous state
+  //WiFi.disconnect(true);  // Clean up previous state
   delay(100);
   WiFi.mode(WIFI_AP_STA);
-  WiFi.begin(ssid.c_str(), password.c_str());
+  //WiFi.begin(ssid.c_str(), password.c_str());
 
   // Common WiFi connection loop
   while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
@@ -446,7 +446,7 @@ void setupWiFi() {
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid.c_str(), password.c_str());
 
-    WiFi.disconnect(true);
+    //WiFi.disconnect(true);
     delay(1000);
 
     bool apStarted = WiFi.softAP(ssid.c_str(), password.c_str());
@@ -475,6 +475,7 @@ void setupWiFi() {
     if (WiFi.status() == WL_CONNECTED) {
       usingFallbackAP = false;
       ipAddress = WiFi.localIP().toString();
+      Serial.println("");
       Serial.println("\n✅ Connected to WiFi");
       Serial.print("SSID: ");
       Serial.println(ssid);
@@ -774,7 +775,7 @@ void handleBluetoothData(String command) {
     processCommand(completeCommand);
     esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
     Serial.printf("📤ESP-NOW Sending by %s: %s %s\n", macToString(hostMAC).c_str(), completeCommand.c_str(),
-                  result == ESP_OK ? "✅" : "❌");
+                 result == ESP_OK ? "✅" : "❌");
     //sendData("espNow", completeCommand, "");
 
     // Remove the processed command from accumulated data
@@ -976,6 +977,10 @@ void processCommand(String command) {
   } else if (command.startsWith("r2:")) {
     Serial.println("Sending SECONDARY info to App.");
 
+  } else if (command.startsWith("ACK:")) {
+    Serial.println("OK!");
+    return;
+
   } else {
     Serial.println("Unknown command: " + command);
   }
@@ -1096,6 +1101,13 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
     //return;
   }
 
+  // If we received a broadcast and we're SECONDARY, respond so PRIMARY learns our MAC
+  if (savedRole == "SECONDARY") {
+    String ack = "ACK: " + savedRole;
+    esp_now_send(info->src_addr, (uint8_t *)ack.c_str(), ack.length());
+    Serial.println("🔁 Responded to PRIMARY with ACK");
+  }
+
   // Otherwise handle as a normal string command
   espNowDataBuffer = receivedData;
   espNowDataReceived = true;
@@ -1204,36 +1216,53 @@ void sendData(const String &device, const String &type, const String &data) {
     return;
   }
 
-  if (!esp_now_is_peer_exist(broadcastMAC)) {
-    Serial.println("Broadcast address not available");
-    setupEspNow();  // This safely reinitializes if needed
-  }
-
-
   char messageBuffer[250];
   String currentMessage;
 
   if (device == "espNow") {
+    Serial.println(data.c_str());
     snprintf(messageBuffer, sizeof(messageBuffer), "%s:%s", type.c_str(), data.c_str());
     currentMessage = String(messageBuffer);
 
-    if (currentMessage != lastEspNowMessage) {
-      for (int i = 0; i < peerCount; i++) {
-        if (!esp_now_is_peer_exist(knownPeers[i])) {
-          Serial.println("🚫 Peer not known: " + macToString(knownPeers[i]));
-          continue;
-        }
+    // Show what we're trying to send
+    Serial.println("📤 sendData(espNow): " + currentMessage);
+    Serial.println("🔎 Known Peers: " + String(peerCount));
 
-        esp_err_t result = esp_now_send(knownPeers[i], (uint8_t *)currentMessage.c_str(), currentMessage.length());
-        Serial.printf("📤ESP-NOW Sending by %s: %s %s\n",
-                      macToString(hostMAC).c_str(),
-                      currentMessage.c_str(),
-                      result == ESP_OK ? "✅" : "❌");
-      }
-      lastEspNowMessage = currentMessage;
-    } else {
-      Serial.println("Duplicate ESP-NOW message detected. Skipping send.");
+    // If it's a duplicate, skip
+    if (currentMessage == lastEspNowMessage) {
+      Serial.println("⚠️ Duplicate ESP-NOW message detected. Skipping send.");
+      return;
     }
+
+    bool sent = false;
+
+    // Send to all known peers
+    for (int i = 0; i < peerCount; i++) {
+      if (!esp_now_is_peer_exist(knownPeers[i])) {
+        Serial.println("🔁 Peer not found. Trying to re-add: " + macToString(knownPeers[i]));
+        esp_now_peer_info_t peerInfo = {};
+        memcpy(peerInfo.peer_addr, knownPeers[i], 6);
+        peerInfo.channel = 0;
+        peerInfo.encrypt = false;
+        esp_now_add_peer(&peerInfo);
+      }
+
+      esp_err_t result = esp_now_send(knownPeers[i], (uint8_t *)currentMessage.c_str(), currentMessage.length());
+      Serial.printf("📡 Sent to %s: %s %s\n",
+                    macToString(knownPeers[i]).c_str(),
+                    currentMessage.c_str(),
+                    result == ESP_OK ? "✅" : "❌");
+
+      if (result == ESP_OK) sent = true;
+    }
+
+    // Fallback to broadcast if nothing was sent or no peers
+    if (!sent || peerCount == 0) {
+      Serial.println("📡 No peers or failed sends. Broadcasting message.");
+      esp_now_send(broadcastMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
+    }
+
+    lastEspNowMessage = currentMessage;
   }
 
   else if (device == "app" && deviceRole == PRIMARY) {
@@ -1243,15 +1272,12 @@ void sendData(const String &device, const String &type, const String &data) {
       currentMessage = type + ":" + data + ";";
     }
 
-    // Check if the current message is different from the last sent message
     if (currentMessage != lastAppMessage) {
       updateBluetoothData(currentMessage);
-      Serial.println("Sending to app: " + currentMessage);
-
-      // Update the last sent message
+      Serial.println("📱 Sending to app: " + currentMessage);
       lastAppMessage = currentMessage;
     } else {
-      Serial.println("Duplicate App message detected. Skipping send.");
+      Serial.println("⚠️ Duplicate App message detected. Skipping send.");
     }
   }
 }
