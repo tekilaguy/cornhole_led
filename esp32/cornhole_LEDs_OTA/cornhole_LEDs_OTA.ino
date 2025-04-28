@@ -241,14 +241,6 @@ void setup() {
 
   initializePreferences();
   defaultPreferences();
-  WiFi.disconnect(true);
-  setupWiFi();
-  delay(100);
-  //WiFi.mode(WIFI_AP_STA);
-  esp_wifi_set_promiscuous(true);  // <-- Required before setting channel
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_promiscuous(false);  // <-- Restore normal state
-  delay(random(300, 2000));         // Helps stagger role elections
 
   setupEspNow();
   resolveRole();
@@ -431,11 +423,11 @@ void setupWiFi() {
   //WiFi.disconnect(true);  // Clean up previous state
   delay(100);
   WiFi.mode(WIFI_AP_STA);
-  //WiFi.begin(ssid.c_str(), password.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
 
   // Common WiFi connection loop
   while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
-    delay(500);
+    delay(2500);
     Serial.print(".");
     attempts++;
   }
@@ -446,7 +438,7 @@ void setupWiFi() {
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid.c_str(), password.c_str());
 
-    //WiFi.disconnect(true);
+    WiFi.disconnect(true);
     delay(1000);
 
     bool apStarted = WiFi.softAP(ssid.c_str(), password.c_str());
@@ -500,6 +492,15 @@ void setupWiFi() {
 // ---------------------- Setup ESP-NOW ----------------------
 
 void setupEspNow() {
+  WiFi.disconnect(true);
+
+  delay(100);
+  WiFi.mode(WIFI_AP_STA);
+  esp_wifi_set_promiscuous(true);  // <-- Required before setting channel
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);  // <-- Restore normal state
+  delay(random(300, 2000));         // Helps stagger role elections
+
   if (esp_now_init() != ESP_OK) {
     Serial.println("❌ ESP-NOW init failed");
     //return;
@@ -508,7 +509,7 @@ void setupEspNow() {
 
   // Always register callbacks after init
   esp_now_register_recv_cb(onDataRecv);
-  //esp_now_register_send_cb(onDataSent);
+  esp_now_register_send_cb(onDataSent);
 
   // Add broadcast peer if needed
   esp_now_peer_info_t broadcastInfo = {};
@@ -775,9 +776,11 @@ void handleBluetoothData(String command) {
     processCommand(completeCommand);
     esp_err_t result = esp_now_send(broadcastMAC, (uint8_t *)completeCommand.c_str(), completeCommand.length());
     Serial.printf("📤ESP-NOW Sending by %s: %s %s\n", macToString(hostMAC).c_str(), completeCommand.c_str(),
-                 result == ESP_OK ? "✅" : "❌");
+                  result == ESP_OK ? "✅" : "❌");
     //sendData("espNow", completeCommand, "");
-
+    if (result != ESP_OK) {
+      setupEspNow();
+    }
     // Remove the processed command from accumulated data
     accumulatedData = accumulatedData.substring(endIndex + 1);
 
@@ -788,7 +791,7 @@ void handleBluetoothData(String command) {
 
 void processCommand(String command) {
   preferences.begin("cornhole", false);
-  if (command == "CLEAR_ALL") {
+  if (command.startsWith("CLEAR_ALL")) {
     preferences.clear();  // Clear all preferences
     preferences.end();    // Clear all preferences
     //const char *message = "CLEAR_ALL";
@@ -1272,12 +1275,16 @@ void sendData(const String &device, const String &type, const String &data) {
       currentMessage = type + ":" + data + ";";
     }
 
-    if (currentMessage != lastAppMessage) {
+    if (currentMessage != lastAppMessage && savedRole == "PRIMARY") {
       updateBluetoothData(currentMessage);
       Serial.println("📱 Sending to app: " + currentMessage);
       lastAppMessage = currentMessage;
     } else {
-      Serial.println("⚠️ Duplicate App message detected. Skipping send.");
+      if (deviceRole == PRIMARY) {
+        Serial.println("⚠️ Duplicate App message detected. Skipping send.");
+      } else {
+        Serial.println("⚠️ This is the SECONDARY. Skipping send.");
+      }
     }
   }
 }
@@ -1285,7 +1292,7 @@ void sendData(const String &device, const String &type, const String &data) {
 void updateBluetoothData(String data) {
   if (deviceRole != PRIMARY || pCharacteristic == nullptr) return;  // Prevent crash
 
-  const int maxChunkSize = 20;                                             // Maximum BLE payload size is 20 bytes
+  const int maxChunkSize = 250;                                            // Maximum BLE payload size is 20 bytes
   String message = data;                                                   // Full message to send
   int totalChunks = (message.length() + maxChunkSize - 1) / maxChunkSize;  // Total number of chunks
 
@@ -1302,80 +1309,84 @@ void updateBluetoothData(String data) {
 }
 
 void startOtaUpdate(String firmwareUrl) {
-  String jsonUrl = firmwareUrl + "/cornhole_board_version.json";
+  setupWiFi();
+  delay(3000);
+  if (WiFi.status() == WL_CONNECTED && savedRole == "PRIMARY") {
+    String jsonUrl = firmwareUrl + "/cornhole_board_version.json";
 
-  if (savedRole == "PRIMARY") {
-    Serial.println("📡 PRIMARY checking for OTA update...");
-    Serial.println("Connecting to: " + jsonUrl);
+    if (savedRole == "PRIMARY") {
+      Serial.println("📡 PRIMARY checking for OTA update...");
+      Serial.println("Connecting to: " + jsonUrl);
 
-    WiFiClientSecure client;
-    client.setInsecure();  // <-- required to bypass SSL cert check for GitHub
+      WiFiClientSecure client;
+      client.setInsecure();  // <-- required to bypass SSL cert check for GitHub
 
-    HTTPClient http;
+      HTTPClient http;
 
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("❌ Not connected to WiFi. Skipping OTA check.");
-      return;
-    }
+      if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("❌ Not connected to WiFi. Skipping OTA check.");
+        return;
+      }
 
-    delay(500);  // allow connection stack to settle
+      delay(500);  // allow connection stack to settle
 
-    Serial.println("⏳ Attempting secure connection...");
-    bool ok = http.begin(client, jsonUrl);
-    if (!ok) {
-      Serial.println("❌ http.begin() failed — likely DNS/TLS error");
-      return;
-    }
+      Serial.println("⏳ Attempting secure connection...");
+      bool ok = http.begin(client, jsonUrl);
+      if (!ok) {
+        Serial.println("❌ http.begin() failed — likely DNS/TLS error");
+        return;
+      }
 
-    if (!http.begin(client, jsonUrl)) {
-      Serial.println("❌ HTTPClient begin() failed.");
-      return;
-    }
+      if (!http.begin(client, jsonUrl)) {
+        Serial.println("❌ HTTPClient begin() failed.");
+        return;
+      }
 
-    int httpCode = http.GET();
-    if (httpCode != 200) {
-      Serial.println("❌ Failed to fetch version file. HTTP code: " + String(httpCode));
+      int httpCode = http.GET();
+      if (httpCode != 200) {
+        Serial.println("❌ Failed to fetch version file. HTTP code: " + String(httpCode));
+        http.end();
+        return;
+      }
+
+      String payload = http.getString();
+      Serial.println("✅ Raw JSON Payload:\n" + payload);
+
+      DynamicJsonDocument doc(1024);
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error) {
+        Serial.println("❌ JSON parse error: " + String(error.c_str()));
+        http.end();
+        return;
+      }
+
+      String binName = doc["bin"];
+      String version = doc["version"];
+      String file_url = doc["file_url"];
+      String binUrl = file_url + binName;
+
+      Serial.println("🔄 New Version: " + version);
+      Serial.println("📥 Downloading: " + binUrl);
+
       http.end();
-      return;
-    }
 
-    String payload = http.getString();
-    Serial.println("✅ Raw JSON Payload:\n" + payload);
+      // Download .bin to SPIFFS
+      if (downloadFirmwareToSPIFFS(binUrl, "/update.bin")) {
+        Serial.println("✅ Firmware saved to SPIFFS.");
 
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, payload);
-    if (error) {
-      Serial.println("❌ JSON parse error: " + String(error.c_str()));
-      http.end();
-      return;
-    }
+        // Serve the .bin locally
+        server.on("/update.bin", HTTP_GET, [](AsyncWebServerRequest *request) {
+          request->send(SPIFFS, "/update.bin", "application/octet-stream");
+        });
 
-    String binName = doc["bin"];
-    String version = doc["version"];
-    String file_url = doc["file_url"];
-    String binUrl = file_url + binName;
+        server.begin();
+        Serial.println("🌐 Hosting firmware at /update.bin");
 
-    Serial.println("🔄 New Version: " + version);
-    Serial.println("📥 Downloading: " + binUrl);
-
-    http.end();
-
-    // Download .bin to SPIFFS
-    if (downloadFirmwareToSPIFFS(binUrl, "/update.bin")) {
-      Serial.println("✅ Firmware saved to SPIFFS.");
-
-      // Serve the .bin locally
-      server.on("/update.bin", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(SPIFFS, "/update.bin", "application/octet-stream");
-      });
-
-      server.begin();
-      Serial.println("🌐 Hosting firmware at /update.bin");
-
-      // Notify secondary to update
-      sendData("espNow", "BEGIN_OTA", "http://" + ipAddress + "/update.bin");
-    } else {
-      Serial.println("❌ Failed to download firmware.");
+        // Notify secondary to update
+        sendData("espNow", "BEGIN_OTA", "http://" + ipAddress + "/update.bin");
+      } else {
+        Serial.println("❌ Failed to download firmware.");
+      }
     }
   }
 }
