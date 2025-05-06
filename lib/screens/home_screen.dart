@@ -519,6 +519,10 @@ class HomeScreenState extends State<HomeScreen> {
     sendCommand('toggleEspNow:${espNowEnabled ? 'on' : 'off'};');
   }
 
+  void sendDeepSleep() {
+    sendCommand('toggleDeepSleep:SLEEP;');
+  }
+
   void sendRestart() {
     sendCommand('Restart;');
   }

@@ -194,7 +194,7 @@ class BLEProvider with ChangeNotifier {
   }
 
   Future<void> attemptReconnection(BluetoothDevice device) async {
-    if (isReconnecting) return;
+    if (isReconnecting || isConnected) return;
     isReconnecting = true;
 
     for (int i = 0; i < reconnectDuration.inSeconds / 5; i++) {

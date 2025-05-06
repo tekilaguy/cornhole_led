@@ -331,14 +331,17 @@ void loop() {
   if (millis() - lastSystemActivityTime > (unsigned long)inactivityTimeout * 1000UL) {
     Serial.println("Inactivity timeout reached. Turning off all lights...");
     lightsOn = false;
+    Serial.printf("Inactivity Timeout: %d\n", inactivityTimeout);
     sendData("espNow", "toggleLights", "off");
     toggleLights(lightsOn);
   }
 
   if (millis() - lastUserActivityTime > (unsigned long)deepSleepTimeout * 1000UL) {
     Serial.println("Deep Sleep timeout reached. Entering deep sleep...");
-    sendData("espNow", "togglePower", "SLEEP");
-    delay(100);  // allow message to print
+    Serial.printf("Deep Sleep Timeout: %d\n", deepSleepTimeout);
+    sendData("espNow", "toggle", "SLEEP");
+    FastLED.clear(true);  // Clears all LEDs and shows black
+    delay(100);           // Ensure it gets shown before sleeping    delay(100);  // allow message to print
     esp_deep_sleep_start();
   }
 }
@@ -371,8 +374,8 @@ void initializePreferences() {
     preferences.putInt("brightness", 50);
     preferences.putULong("blockSize", 15);
     preferences.putULong("effectSpeed", 25);
-    preferences.putInt("inactivityTimeout", 10);
-    preferences.putInt("deepSleepTimeout", 15);
+    preferences.putInt("inactivityTimeout", 30000);
+    preferences.putInt("deepSleepTimeout", 60000);
     preferences.putULong("irTriggerDuration", 4000);
 
     preferences.putBool("nvsInit", true);
@@ -405,8 +408,8 @@ void defaultPreferences() {
   brightness = preferences.getInt("brightness", 50);
   blockSize = preferences.getULong("blockSize", 15);
   effectSpeed = preferences.getULong("effectSpeed", 25);
-  inactivityTimeout = preferences.getInt("inactivityTimeout", 30);
-  deepSleepTimeout = preferences.getInt("deepSleepTimeout", 60);
+  inactivityTimeout = preferences.getInt("inactivityTimeout", 30000);
+  deepSleepTimeout = preferences.getInt("deepSleepTimeout", 60000);
   irTriggerDuration = preferences.getULong("irTriggerDuration", 4000);
 
   Serial.println("Preferences loaded into in-memory variables:");
@@ -948,12 +951,12 @@ void processCommand(String command) {
   } else if (command.startsWith("toggleDeepSleep")) {
     Serial.println("App Command: Entering deep sleep...");
 
-    sendData("espNow", "togglePower", "SLEEP");
     if (deviceRole == PRIMARY) {
-      sendData("app", "togglePower", "SLEEP");
+      sendData("espNow", "toggleDeepSleep", "SLEEP");
     }
 
-    delay(200);  // Let messages send
+    FastLED.clear(true);  // Clears all LEDs and shows black
+    delay(200);           // Ensure it gets shown before sleeping    delay(100);  // allow message to print
     esp_deep_sleep_start();
   } else if (command.startsWith("toggleWiFi")) {
     String status = command.substring(11);
@@ -1503,12 +1506,13 @@ void doubleClick() {
 void longPress() {
   Serial.println("Long Press: Entering deep sleep...");
 
-  sendData("espNow", "togglePower", "SLEEP");
+  sendData("espNow", "toggleDeepSleep", "SLEEP");
   if (deviceRole == PRIMARY) {
-    sendData("app", "togglePower", "SLEEP");
+    sendData("app", "toggleDeepSleep", "SLEEP");
   }
 
-  delay(200);  // Let messages send
+  FastLED.clear(true);  // Clears all LEDs and shows black
+  delay(100);           // Ensure it gets shown before sleeping    delay(100);  // allow message to print
   esp_deep_sleep_start();
 }
 
@@ -1577,8 +1581,25 @@ void handleIRSensor() {
     effectStartTime = millis();
     effectRunning = true;
     irTriggered = true;
+
+    // Turn lights on if they were off
+    if (!lightsOn) {
+      lightsOn = true;
+      toggleLights(true);
+      sendData("espNow", "toggleLights", "on");
+      if (deviceRole == PRIMARY) {
+        sendData("app", "toggleLights", "on");
+      }
+      Serial.println("IR Trigger: Lights were off — turning on.");
+    }
+
     ledEffects.celebrationEffect();
     Serial.println("IR Sensor Triggered: Celebration Effect Started");
+
+    while (millis() - effectStartTime < effectDuration) {
+      ledEffects.celebrationEffect();
+      delay(20);  // adjust to match animation frame rate
+    }
   }
 
   if (effectRunning && (millis() - effectStartTime >= effectDuration)) {

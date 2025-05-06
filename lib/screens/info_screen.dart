@@ -74,6 +74,36 @@ class InfoScreenState extends State<InfoScreen> {
     homeScreenState?.sendCommand('UPDATE:$url;');
   }
 
+  void toggleDeepSleep() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Sleep'),
+        content: const Text(
+            'Are you sure you want to put the Cornhole to Sleep?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sleep'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed ?? false) {
+      homeScreenState?.sendDeepSleep();
+      isConnected = false;
+      await Future.delayed(
+          const Duration(seconds: 1)); // Wait for restart command to be sent
+      homeScreenState?.disconnectDevice();
+      Navigator.pop(context);
+    }
+  }
+
   void restartBoards() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -255,6 +285,32 @@ class InfoScreenState extends State<InfoScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+        Column(
+          children: [
+            const Text(
+              'Sleep',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
+            ElevatedButton(
+              onPressed: toggleDeepSleep,
+              child: const Icon(Icons.power, size: 30),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                elevation: 25,
+                shadowColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50),
+                  side: const BorderSide(color: Colors.black, width: .5),
+                ),
+                padding: const EdgeInsets.all(20),
+              ),
+            ),
+          ],
+        ),
         Column(
           children: [
             const Text(
