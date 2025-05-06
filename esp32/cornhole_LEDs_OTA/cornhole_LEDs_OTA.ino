@@ -90,8 +90,10 @@ int brightness = 25;
 unsigned long blockSize = 10;
 unsigned long effectSpeed = 25;
 int inactivityTimeout = 30;
+int deepSleepTimeout = 60;
 unsigned long irTriggerDuration = 4000;
-unsigned long lastActivityTime = 0;
+unsigned long lastUserActivityTime = 0;    // real user interaction
+unsigned long lastSystemActivityTime = 0;  // any data received or sent
 
 // Color Definitions
 #define BURNT_ORANGE CRGB(191, 87, 0)
@@ -278,6 +280,11 @@ void setup() {
   effectIndex = getEffectIndex("Solid");  // or any default effect
   ledEffects.applyEffect(effects[effectIndex]);
 
+  lastUserActivityTime = millis();
+  lastSystemActivityTime = millis();
+
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
+
   Serial.println("Setup completed.");
 }
 // ---------------------- Loop ----------------------
@@ -321,6 +328,19 @@ void loop() {
   if (deviceRole == PRIMARY) {
     //ArduinoOTA.handle();
   }
+  if (millis() - lastSystemActivityTime > (unsigned long)inactivityTimeout * 1000UL) {
+    Serial.println("Inactivity timeout reached. Turning off all lights...");
+    lightsOn = false;
+    sendData("espNow", "toggleLights", "off");
+    toggleLights(lightsOn);
+  }
+
+  if (millis() - lastUserActivityTime > (unsigned long)deepSleepTimeout * 1000UL) {
+    Serial.println("Deep Sleep timeout reached. Entering deep sleep...");
+    sendData("espNow", "togglePower", "SLEEP");
+    delay(100);  // allow message to print
+    esp_deep_sleep_start();
+  }
 }
 
 // ---------------------- Initialization Functions ----------------------
@@ -351,7 +371,8 @@ void initializePreferences() {
     preferences.putInt("brightness", 50);
     preferences.putULong("blockSize", 15);
     preferences.putULong("effectSpeed", 25);
-    preferences.putInt("inactivityTimeout", 30);
+    preferences.putInt("inactivityTimeout", 10);
+    preferences.putInt("deepSleepTimeout", 15);
     preferences.putULong("irTriggerDuration", 4000);
 
     preferences.putBool("nvsInit", true);
@@ -385,6 +406,7 @@ void defaultPreferences() {
   blockSize = preferences.getULong("blockSize", 15);
   effectSpeed = preferences.getULong("effectSpeed", 25);
   inactivityTimeout = preferences.getInt("inactivityTimeout", 30);
+  deepSleepTimeout = preferences.getInt("deepSleepTimeout", 60);
   irTriggerDuration = preferences.getULong("irTriggerDuration", 4000);
 
   Serial.println("Preferences loaded into in-memory variables:");
@@ -400,6 +422,7 @@ void defaultPreferences() {
   Serial.printf("Block Size: %lu\n", blockSize);
   Serial.printf("Effect Speed: %lu\n", effectSpeed);
   Serial.printf("Inactivity Timeout: %d\n", inactivityTimeout);
+  Serial.printf("Deep Sleep Timeout: %d\n", deepSleepTimeout);
   Serial.printf("IR Trigger Duration: %lu\n", irTriggerDuration);
 
   // Update the LEDEffects object with the new values
@@ -787,9 +810,13 @@ void handleBluetoothData(String command) {
     // Check for the next command in the remaining data
     endIndex = accumulatedData.indexOf(';');
   }
+  lastSystemActivityTime = millis();
 }
 
 void processCommand(String command) {
+
+  lastSystemActivityTime = millis();
+
   preferences.begin("cornhole", false);
   if (command.startsWith("CLEAR_ALL")) {
     preferences.clear();  // Clear all preferences
@@ -887,6 +914,11 @@ void processCommand(String command) {
     preferences.putInt("inactivityTimeout", inactivityTimeout);
     Serial.println("Inactivity Timeout updated to: " + String(inactivityTimeout));
 
+  } else if (command.startsWith("DEEPSLEEP:")) {
+    sscanf(command.c_str(), "DEEPSLEEP:%d", &deepSleepTimeout);
+    preferences.putInt("deepSleepTimeout", deepSleepTimeout);
+    Serial.println("Deep Sleep Timeout updated to: " + String(deepSleepTimeout));
+
   } else if (command.startsWith("Effect:")) {
     String effect = command.substring(7);
     effectIndex = getEffectIndex(effect);  // Set the effect index based on received effect
@@ -912,6 +944,17 @@ void processCommand(String command) {
     ledEffects.setBrightness(brightness);  // Use library's method if available
     Serial.println("Brightness set to: " + String(brightness));
 
+
+  } else if (command.startsWith("toggleDeepSleep")) {
+    Serial.println("App Command: Entering deep sleep...");
+
+    sendData("espNow", "togglePower", "SLEEP");
+    if (deviceRole == PRIMARY) {
+      sendData("app", "togglePower", "SLEEP");
+    }
+
+    delay(200);  // Let messages send
+    esp_deep_sleep_start();
   } else if (command.startsWith("toggleWiFi")) {
     String status = command.substring(11);
     bool wifiStatus = (status == "off");
@@ -1193,7 +1236,7 @@ bool downloadFirmwareToSPIFFS(String url, String path) {
 // ---------------------- Communication Functions ----------------------
 void sendSettings() {
   char data[512];
-  sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%lu;SPEED:%lu;CELEB:%lu;TIMEOUT:%d",
+  sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%lu;SPEED:%lu;CELEB:%lu;TIMEOUT:%d;DEEPSLEEP:%d",
           ssid.c_str(),
           password.c_str(),
           board1Name.c_str(),
@@ -1205,7 +1248,8 @@ void sendSettings() {
           blockSize,
           effectSpeed,
           irTriggerDuration,
-          inactivityTimeout);
+          inactivityTimeout,
+          deepSleepTimeout);
 
   //   sendData("espNow", "SETTINGS", String(data));
   if (savedRole == "PRIMARY") {
@@ -1438,6 +1482,7 @@ void singleClick() {
     sendData("app", "ColorIndex", String(colorIndex));
   }
   Serial.println("Single Click: Color changed to index " + String(colorIndex));
+  lastUserActivityTime = millis();
 }
 
 void doubleClick() {
@@ -1452,22 +1497,26 @@ void doubleClick() {
     sendData("app", "Effect", effects[effectIndex]);
   }
   Serial.println("Double Click: Effect changed to " + effects[effectIndex]);
+  lastUserActivityTime = millis();
 }
 
 void longPress() {
-  toggleLights(!lightsOn);
-  sendData("espNow", "toggleLights", lightsOn ? "on" : "off");
+  Serial.println("Long Press: Entering deep sleep...");
 
+  sendData("espNow", "togglePower", "SLEEP");
   if (deviceRole == PRIMARY) {
-    sendData("app", "toggleLights", lightsOn ? "on" : "off");
+    sendData("app", "togglePower", "SLEEP");
   }
 
-  Serial.println("Long Press: Lights turned " + String(lightsOn ? "on" : "off"));
+  delay(200);  // Let messages send
+  esp_deep_sleep_start();
 }
 
 // ---------------------- Utility Functions ----------------------
+
 void toggleLights(bool status) {
   lightsOn = status;
+  if (status) lastUserActivityTime = millis();
   ledEffects.setColor(lightsOn ? currentColor : CRGB::Black);  // Set color if on, black if off
   String message = String(status ? "on" : "off");
 
@@ -1538,6 +1587,7 @@ void handleIRSensor() {
     ledEffects.setColor(currentColor);
     Serial.println("IR Sensor Triggered: Celebration Effect Ended");
   }
+  lastUserActivityTime = millis();
 }
 
 // ---------------------- Battery Monitoring Functions ----------------------

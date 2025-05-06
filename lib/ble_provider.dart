@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'global.dart';
 import 'dart:io';
+import 'ble_mtu.dart';
 
 class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
@@ -35,6 +36,9 @@ class BLEProvider with ChangeNotifier {
   bool get lightsOn => _lightsOn;
   bool get espNowEnabled => _espNowEnabled;
   Color get initialStartupColor => _initialStartupColor;
+
+  int _negotiatedMtu = 23; // default BLE MTU
+  int get negotiatedMtu => _negotiatedMtu;
 
   // Board 1
   String _boardRole1 = '';
@@ -132,56 +136,55 @@ class BLEProvider with ChangeNotifier {
     super.dispose();
   }
 
-void manageBluetoothState(BluetoothDevice device) {
-  connectionStateSubscription?.cancel();
-  connectionStateSubscription = device.connectionState.listen((state) async {
-    logger.i("BLE Connection State Changed: $state");
+  void manageBluetoothState(BluetoothDevice device) {
+    connectionStateSubscription?.cancel();
+    connectionStateSubscription = device.connectionState.listen((state) async {
+      logger.i("BLE Connection State Changed: $state");
 
-    if (state == BluetoothConnectionState.connected) {
-      logger.i("✅ Device connected: ${device.platformName}");
+      if (state == BluetoothConnectionState.connected) {
+        logger.i("✅ Device connected: ${device.platformName}");
 
-      _isConnected = true;
-      connectedDevice = device;
+        _isConnected = true;
+        connectedDevice = device;
 
-      // Stop scanning manually (fixes iOS staying in scanning mode)
-      FlutterBluePlus.stopScan();
+        // Stop scanning manually (fixes iOS staying in scanning mode)
+        FlutterBluePlus.stopScan();
 
-      // Small delay for iOS to ensure proper state update
-      if (Platform.isIOS) {
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Small delay for iOS to ensure proper state update
+        if (Platform.isIOS) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+
+        discoverServices(device);
+        reconnectTimer?.cancel();
+
+        logger.i("🔹 Notifying UI: _isConnected = $_isConnected");
+        notifyListeners();
+      } else if (state == BluetoothConnectionState.disconnected) {
+        logger.w("⚠️ Device disconnected: ${device.platformName}");
+
+        _isConnected = false;
+        connectedDevice = null;
+
+        // Ensure UI updates properly
+        logger.i("🔹 Notifying UI: _isConnected = $_isConnected");
+        notifyListeners();
+
+        // Attempt reconnection if needed
+        attemptReconnection(device);
       }
-
-      discoverServices(device);
-      reconnectTimer?.cancel();
-
-      logger.i("🔹 Notifying UI: _isConnected = $_isConnected");
-      notifyListeners();
-    } 
-    else if (state == BluetoothConnectionState.disconnected) {
-      logger.w("⚠️ Device disconnected: ${device.platformName}");
-
-      _isConnected = false;
-      connectedDevice = null;
-
-      // Ensure UI updates properly
-      logger.i("🔹 Notifying UI: _isConnected = $_isConnected");
-      notifyListeners();
-
-      // Attempt reconnection if needed
-      attemptReconnection(device);
-    }
-  });
-}
+    });
+  }
 
   Future<void> connectToDevice(BluetoothDevice device) async {
     logger.i("Connecting to device: ${device.platformName}");
     try {
-if (Platform.isIOS) {
-  await Future.delayed(const Duration(seconds: 1)); // Small delay for stability
-}
-await device.connect(autoConnect: false);
-FlutterBluePlus.stopScan();
-await device.requestMtu(240);
+      if (Platform.isIOS) {
+        await Future.delayed(
+            const Duration(seconds: 1)); // Small delay for stability
+      }
+      await device.connect(autoConnect: false);
+      FlutterBluePlus.stopScan();
       manageBluetoothState(device); // Consolidate state management
     } catch (e) {
       logger.e("Cannot connect, exception occurred: $e");
@@ -219,8 +222,15 @@ await device.requestMtu(240);
     notifyListeners();
   }
 
-  void discoverServices(BluetoothDevice device) async {
+  Future<void> discoverServices(BluetoothDevice device) async {
     try {
+      // ①  Negotiate MTU
+      final mtu = await MtuNegotiator().negotiate(device);
+      // You can keep it in a field if you want to show it in the UI:
+       _negotiatedMtu = mtu;
+      //_negotiatedMtu = await MtuNegotiator().negotiate(device);
+
+      // ②  Now discover services
       List<BluetoothService> services = await device.discoverServices();
       for (BluetoothService service in services) {
         for (BluetoothCharacteristic characteristic
@@ -478,9 +488,8 @@ await device.requestMtu(240);
 
   Future<void> sendLargeMessage(
       BluetoothCharacteristic characteristic, String message) async {
-    int mtu = await device!.requestMtu(240);
     int chunkSize =
-        mtu > 3 ? mtu - 3 : 20; // Default to 20 if negotiation fails
+        _negotiatedMtu  > 3 ? _negotiatedMtu  - 3 : 20; // Default to 20 if negotiation fails
     int messageLength = message.length;
     int totalChunks = (messageLength + chunkSize - 1) ~/ chunkSize;
 
