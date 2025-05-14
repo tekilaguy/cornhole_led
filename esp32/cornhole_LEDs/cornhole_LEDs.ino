@@ -1,21 +1,30 @@
-#include <LEDEffects.h>
-
 // Unified Cornhole Controller Sketch
+
+//corbholeLEDs.ino
+
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <FastLED.h>
+#include <LEDEffects.h>
 #include <OneButton.h>
+#include <Preferences.h>
+
 #include <esp_now.h>
 #include <esp_mac.h>
 #include <esp_wifi.h>
-#include <Preferences.h>
+#include <ESPmDNS.h>
+
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <ESPmDNS.h>
-#include <ArduinoOTA.h>
+
 #include <HTTPUpdate.h>
 #include <ESPAsyncWebServer.h>
+
+#include <SPIFFS.h>
+#include <ArduinoOTA.h>
+#include <ArduinoJson.h>
 
 // ---------------------- ESP-NOW Configuration ----------------------
 
@@ -40,7 +49,7 @@ bool roleMessageSeen = false;
 String ipAddress;
 
 // Web Server (only for PRIMARY)
-//AsyncWebServer server(8080);
+AsyncWebServer server(8080);
 
 // ---------------------- LED Setup ----------------------
 #define RING_LED_PIN 2
@@ -56,8 +65,8 @@ CRGB ringLeds[NUM_LEDS_RING];
 CRGB boardLeds[NUM_LEDS_BOARD];
 
 // ---------------------- Button and Sensors ----------------------
-#define BUTTON_PIN 14
-#define SENSOR_PIN 12
+#define BUTTON_PIN 12
+#define SENSOR_PIN 14
 #define BATTERY_PIN 35
 
 // Button Setup
@@ -81,8 +90,10 @@ int brightness = 25;
 unsigned long blockSize = 10;
 unsigned long effectSpeed = 25;
 int inactivityTimeout = 30;
+int deepSleepTimeout = 60;
 unsigned long irTriggerDuration = 4000;
-unsigned long lastActivityTime = 0;
+unsigned long lastUserActivityTime = 0;    // real user interaction
+unsigned long lastSystemActivityTime = 0;  // any data received or sent
 
 // Color Definitions
 #define BURNT_ORANGE CRGB(191, 87, 0)
@@ -163,7 +174,7 @@ void setupWiFi();
 void setupEspNow();
 void setupBT();
 void setupOta();
-//void setupWebServer();
+void setupWebServer();
 void initializePreferences();
 void defaultPreferences();
 void handleBluetoothData(String data);
@@ -191,6 +202,7 @@ float readBatteryVoltage();
 int readBatteryLevel();
 void processCommand(String command);
 void resolveRole();
+void printPeers();
 
 // Callback class for handling BLE connection events
 class MyServerCallbacks : public BLEServerCallbacks {
@@ -231,14 +243,6 @@ void setup() {
 
   initializePreferences();
   defaultPreferences();
-  //setupWiFi();
-  WiFi.disconnect(true);
-  delay(100);
-  WiFi.mode(WIFI_AP_STA);
-  esp_wifi_set_promiscuous(true);  // <-- Required before setting channel
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_promiscuous(false);  // <-- Restore normal state
-  delay(random(300, 2000));         // Helps stagger role elections
 
   setupEspNow();
   resolveRole();
@@ -251,10 +255,12 @@ void setup() {
 
   if (savedRole == "PRIMARY") {
     setupBT();
-    setupOta();
-    // setupWebServer();
-    //setupWiFi();
+    //setupOta();
+    //setupWebServer();
   }
+
+  SPIFFS.begin(true);
+  server.begin();
 
   currentColor = initialColor;
 
@@ -274,8 +280,14 @@ void setup() {
   effectIndex = getEffectIndex("Solid");  // or any default effect
   ledEffects.applyEffect(effects[effectIndex]);
 
+  lastUserActivityTime = millis();
+  lastSystemActivityTime = millis();
+
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
+
   Serial.println("Setup completed.");
 }
+
 // ---------------------- Loop ----------------------
 void loop() {
   unsigned long currentMillis = millis();
@@ -315,7 +327,23 @@ void loop() {
 
   // Handle OTA updates (PRIMARY only)
   if (deviceRole == PRIMARY) {
-    ArduinoOTA.handle();
+    //ArduinoOTA.handle();
+  }
+  if (millis() - lastSystemActivityTime > (unsigned long)inactivityTimeout * 1000UL) {
+    Serial.println("Inactivity timeout reached. Turning off all lights...");
+    lightsOn = false;
+    Serial.printf("Inactivity Timeout: %d\n", inactivityTimeout);
+    sendData("espNow", "toggleLights", "off");
+    toggleLights(lightsOn);
+  }
+
+  if (millis() - lastUserActivityTime > (unsigned long)deepSleepTimeout * 1000UL) {
+    Serial.println("Deep Sleep timeout reached. Entering deep sleep...");
+    Serial.printf("Deep Sleep Timeout: %d\n", deepSleepTimeout);
+    sendData("espNow", "toggle", "SLEEP");
+    FastLED.clear(true);  // Clears all LEDs and shows black
+    delay(100);           // Ensure it gets shown before sleeping    delay(100);  // allow message to print
+    esp_deep_sleep_start();
   }
 }
 
@@ -347,7 +375,8 @@ void initializePreferences() {
     preferences.putInt("brightness", 50);
     preferences.putULong("blockSize", 15);
     preferences.putULong("effectSpeed", 25);
-    preferences.putInt("inactivityTimeout", 30);
+    preferences.putInt("inactivityTimeout", 30000);
+    preferences.putInt("deepSleepTimeout", 60000);
     preferences.putULong("irTriggerDuration", 4000);
 
     preferences.putBool("nvsInit", true);
@@ -380,7 +409,8 @@ void defaultPreferences() {
   brightness = preferences.getInt("brightness", 50);
   blockSize = preferences.getULong("blockSize", 15);
   effectSpeed = preferences.getULong("effectSpeed", 25);
-  inactivityTimeout = preferences.getInt("inactivityTimeout", 30);
+  inactivityTimeout = preferences.getInt("inactivityTimeout", 30000);
+  deepSleepTimeout = preferences.getInt("deepSleepTimeout", 60000);
   irTriggerDuration = preferences.getULong("irTriggerDuration", 4000);
 
   Serial.println("Preferences loaded into in-memory variables:");
@@ -396,6 +426,7 @@ void defaultPreferences() {
   Serial.printf("Block Size: %lu\n", blockSize);
   Serial.printf("Effect Speed: %lu\n", effectSpeed);
   Serial.printf("Inactivity Timeout: %d\n", inactivityTimeout);
+  Serial.printf("Deep Sleep Timeout: %d\n", deepSleepTimeout);
   Serial.printf("IR Trigger Duration: %lu\n", irTriggerDuration);
 
   // Update the LEDEffects object with the new values
@@ -416,20 +447,20 @@ void setupWiFi() {
   const int maxAttempts = 10;  // Set number of attempts before fallback
   int attempts = 0;
 
-  WiFi.disconnect(true);  // Clean up previous state
+  //WiFi.disconnect(true);  // Clean up previous state
   delay(100);
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   // Common WiFi connection loop
   while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
-    delay(500);
+    delay(2500);
     Serial.print(".");
     attempts++;
   }
 
   // Handle fallback to AP mode (PRIMARY only)
-  if (WiFi.status() != WL_CONNECTED && deviceRole == PRIMARY) {
+  if (WiFi.status() != WL_CONNECTED && savedRole == "PRIMARY") {
     Serial.println("\n❌ Failed to connect. Switching to AP mode...");
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid.c_str(), password.c_str());
@@ -440,34 +471,63 @@ void setupWiFi() {
     bool apStarted = WiFi.softAP(ssid.c_str(), password.c_str());
 
     if (apStarted) {
-      usingFallbackAP = true;
-      ipAddress = WiFi.softAPIP().toString();
-      Serial.println("✅ Soft AP started");
-      Serial.print("Soft SSID: ");
-      Serial.println(ssid);
-      Serial.print("Soft IP Address: ");
-      Serial.println(ipAddress);
-    } else {
-      Serial.println("❌ Failed to start Soft AP");
+
+      delay(1000);
+
+      bool apStarted = WiFi.softAP(ssid.c_str(), password.c_str());
+
+      if (apStarted) {
+        usingFallbackAP = true;
+        ipAddress = WiFi.softAPIP().toString();
+        Serial.println("✅ Soft AP started");
+        Serial.print("Soft SSID: ");
+        Serial.println(ssid);
+        Serial.print("Soft IP Address: ");
+        Serial.println(ipAddress);
+      } else {
+        Serial.println("❌ Failed to start Soft AP");
+      }
+      return;
     }
-    return;
-  }
 
-  // Successfully connected
-  if (WiFi.status() == WL_CONNECTED) {
-    usingFallbackAP = false;
-    ipAddress = WiFi.localIP().toString();
-    Serial.println("\n✅ Connected to WiFi");
-    Serial.print("SSID: ");
-    Serial.println(ssid);
-    Serial.print("IP Address: ");
-    Serial.println(ipAddress);
+    // Successfully connected
+    if (WiFi.status() == WL_CONNECTED) {
+      usingFallbackAP = false;
+      ipAddress = WiFi.localIP().toString();
+      Serial.println("");
+      Serial.println("\n✅ Connected to WiFi");
+      Serial.print("SSID: ");
+      Serial.println(ssid);
+      Serial.print("IP Address: ");
+      Serial.println(ipAddress);
+    }
   }
+  //  delay(3000);
+  Serial.println("✅ Connected to WiFi");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  Serial.print("Subnet Mask: ");
+  Serial.println(WiFi.subnetMask());
+
+  Serial.print("Gateway IP: ");
+  Serial.println(WiFi.gatewayIP());
+
+  Serial.print("DNS Server: ");
+  Serial.println(WiFi.dnsIP());
 }
-
 // ---------------------- Setup ESP-NOW ----------------------
 
 void setupEspNow() {
+  WiFi.disconnect(true);
+
+  delay(100);
+  WiFi.mode(WIFI_AP_STA);
+  esp_wifi_set_promiscuous(true);  // <-- Required before setting channel
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);  // <-- Restore normal state
+  delay(random(300, 2000));         // Helps stagger role elections
+
   if (esp_now_init() != ESP_OK) {
     Serial.println("❌ ESP-NOW init failed");
     //return;
@@ -476,7 +536,7 @@ void setupEspNow() {
 
   // Always register callbacks after init
   esp_now_register_recv_cb(onDataRecv);
-  //esp_now_register_send_cb(onDataSent);
+  esp_now_register_send_cb(onDataSent);
 
   // Add broadcast peer if needed
   esp_now_peer_info_t broadcastInfo = {};
@@ -572,6 +632,7 @@ void setupBT() {
 
   // Initialize BLE Device
   BLEDevice::init("CornholeBT");
+  BLEDevice::setMTU(140);
 
   // Create the BLE Server
   pServer = BLEDevice::createServer();
@@ -744,18 +805,24 @@ void handleBluetoothData(String command) {
     Serial.printf("📤ESP-NOW Sending by %s: %s %s\n", macToString(hostMAC).c_str(), completeCommand.c_str(),
                   result == ESP_OK ? "✅" : "❌");
     //sendData("espNow", completeCommand, "");
-
+    if (result != ESP_OK) {
+      setupEspNow();
+    }
     // Remove the processed command from accumulated data
     accumulatedData = accumulatedData.substring(endIndex + 1);
 
     // Check for the next command in the remaining data
     endIndex = accumulatedData.indexOf(';');
   }
+  lastSystemActivityTime = millis();
 }
 
 void processCommand(String command) {
+
+  lastSystemActivityTime = millis();
+
   preferences.begin("cornhole", false);
-  if (command == "CLEAR_ALL") {
+  if (command.startsWith("CLEAR_ALL")) {
     preferences.clear();  // Clear all preferences
     preferences.end();    // Clear all preferences
     //const char *message = "CLEAR_ALL";
@@ -851,6 +918,11 @@ void processCommand(String command) {
     preferences.putInt("inactivityTimeout", inactivityTimeout);
     Serial.println("Inactivity Timeout updated to: " + String(inactivityTimeout));
 
+  } else if (command.startsWith("DEEPSLEEP:")) {
+    sscanf(command.c_str(), "DEEPSLEEP:%d", &deepSleepTimeout);
+    preferences.putInt("deepSleepTimeout", deepSleepTimeout);
+    Serial.println("Deep Sleep Timeout updated to: " + String(deepSleepTimeout));
+
   } else if (command.startsWith("Effect:")) {
     String effect = command.substring(7);
     effectIndex = getEffectIndex(effect);  // Set the effect index based on received effect
@@ -876,6 +948,17 @@ void processCommand(String command) {
     ledEffects.setBrightness(brightness);  // Use library's method if available
     Serial.println("Brightness set to: " + String(brightness));
 
+
+  } else if (command.startsWith("toggleDeepSleep")) {
+    Serial.println("App Command: Entering deep sleep...");
+
+    if (deviceRole == PRIMARY) {
+      sendData("espNow", "toggleDeepSleep", "SLEEP");
+    }
+
+    FastLED.clear(true);  // Clears all LEDs and shows black
+    delay(200);           // Ensure it gets shown before sleeping    delay(100);  // allow message to print
+    esp_deep_sleep_start();
   } else if (command.startsWith("toggleWiFi")) {
     String status = command.substring(11);
     bool wifiStatus = (status == "off");
@@ -927,14 +1010,26 @@ void processCommand(String command) {
     delay(random(300, 3000));
     ESP.restart();
 
-  } else if (command.startsWith("UPDATE")) {
-    setupWiFi();
-    // Handle OTA updates or other update commands
-    // Example: startOtaUpdate(command.substring(7));
-    Serial.println("Update command received.");
+  } else if (command.startsWith("UPDATE:")) {
+    String otaUrl = command.substring(7);
+    if (savedRole == "PRIMARY") {
+      startOtaUpdate(otaUrl);
+      Serial.println("Update command received.");
+      return;
+    } else {
+      Serial.println("Updates only are triggered by the PRIMARY");
+    }
+
+  } else if (command.startsWith("BEGIN_OTA:")) {
+    String otaUrl = command.substring(10);
+    performHttpOtaUpdate(otaUrl);
 
   } else if (command.startsWith("r2:")) {
     Serial.println("Sending SECONDARY info to App.");
+
+  } else if (command.startsWith("ACK:")) {
+    Serial.println("OK!");
+    return;
 
   } else {
     Serial.println("Unknown command: " + command);
@@ -1056,6 +1151,13 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
     //return;
   }
 
+  // If we received a broadcast and we're SECONDARY, respond so PRIMARY learns our MAC
+  if (savedRole == "SECONDARY") {
+    String ack = "ACK: " + savedRole;
+    esp_now_send(info->src_addr, (uint8_t *)ack.c_str(), ack.length());
+    Serial.println("🔁 Responded to PRIMARY with ACK");
+  }
+
   // Otherwise handle as a normal string command
   espNowDataBuffer = receivedData;
   espNowDataReceived = true;
@@ -1088,7 +1190,7 @@ void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
     }
   }
 }
-
+// ------------------------- Utility -----------------------------------
 String macToString(const uint8_t *mac) {
   char macStr[18];
   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -1098,10 +1200,47 @@ String macToString(const uint8_t *mac) {
   Serial.println(macToString(hostMAC));
 }
 
+bool downloadFirmwareToSPIFFS(String url, String path) {
+  HTTPClient http;
+  http.begin(url);
+  int httpCode = http.GET();
+
+  if (httpCode != 200) {
+    Serial.println("❌ HTTP GET failed.");
+    http.end();
+    return false;
+  }
+
+  File file = SPIFFS.open(path, FILE_WRITE);
+  if (!file) {
+    Serial.println("❌ Failed to open SPIFFS file for writing.");
+    http.end();
+    return false;
+  }
+
+  WiFiClient *stream = http.getStreamPtr();
+  uint8_t buffer[128];
+  int len = http.getSize();
+
+  while (http.connected() && len > 0) {
+    size_t size = stream->available();
+    if (size) {
+      int bytesRead = stream->readBytes(buffer, min(size, sizeof(buffer)));
+      file.write(buffer, bytesRead);
+      len -= bytesRead;
+    }
+    delay(1);
+  }
+
+  file.close();
+  http.end();
+  return true;
+}
+
 // ---------------------- Communication Functions ----------------------
 void sendSettings() {
   char data[512];
-  sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%lu;SPEED:%lu;CELEB:%lu;TIMEOUT:%d",
+  sprintf(data, "S:SSID:%s;PW:%s;B1:%s;B2:%s;COLORINDEX:%d;SPORTCOLOR1:%d,%d,%d;SPORTCOLOR2:%d,%d,%d;BRIGHT:%d;SIZE:%lu;SPEED:%lu;CELEB:%lu;TIMEOUT:%d;DEEPSLEEP:%d",
           ssid.c_str(),
           password.c_str(),
           board1Name.c_str(),
@@ -1113,7 +1252,8 @@ void sendSettings() {
           blockSize,
           effectSpeed,
           irTriggerDuration,
-          inactivityTimeout);
+          inactivityTimeout,
+          deepSleepTimeout);
 
   //   sendData("espNow", "SETTINGS", String(data));
   if (savedRole == "PRIMARY") {
@@ -1127,36 +1267,53 @@ void sendData(const String &device, const String &type, const String &data) {
     return;
   }
 
-  if (!esp_now_is_peer_exist(broadcastMAC)) {
-    Serial.println("Broadcast address not available");
-    setupEspNow();  // This safely reinitializes if needed
-  }
-
-
   char messageBuffer[250];
   String currentMessage;
 
   if (device == "espNow") {
+    Serial.println(data.c_str());
     snprintf(messageBuffer, sizeof(messageBuffer), "%s:%s", type.c_str(), data.c_str());
     currentMessage = String(messageBuffer);
 
-    if (currentMessage != lastEspNowMessage) {
-      for (int i = 0; i < peerCount; i++) {
-        if (!esp_now_is_peer_exist(knownPeers[i])) {
-          Serial.println("🚫 Peer not known: " + macToString(knownPeers[i]));
-          continue;
-        }
+    // Show what we're trying to send
+    Serial.println("📤 sendData(espNow): " + currentMessage);
+    Serial.println("🔎 Known Peers: " + String(peerCount));
 
-        esp_err_t result = esp_now_send(knownPeers[i], (uint8_t *)currentMessage.c_str(), currentMessage.length());
-        Serial.printf("📤ESP-NOW Sending by %s: %s %s\n",
-                      macToString(hostMAC).c_str(),
-                      currentMessage.c_str(),
-                      result == ESP_OK ? "✅" : "❌");
-      }
-      lastEspNowMessage = currentMessage;
-    } else {
-      Serial.println("Duplicate ESP-NOW message detected. Skipping send.");
+    // If it's a duplicate, skip
+    if (currentMessage == lastEspNowMessage) {
+      Serial.println("⚠️ Duplicate ESP-NOW message detected. Skipping send.");
+      return;
     }
+
+    bool sent = false;
+
+    // Send to all known peers
+    for (int i = 0; i < peerCount; i++) {
+      if (!esp_now_is_peer_exist(knownPeers[i])) {
+        Serial.println("🔁 Peer not found. Trying to re-add: " + macToString(knownPeers[i]));
+        esp_now_peer_info_t peerInfo = {};
+        memcpy(peerInfo.peer_addr, knownPeers[i], 6);
+        peerInfo.channel = 0;
+        peerInfo.encrypt = false;
+        esp_now_add_peer(&peerInfo);
+      }
+
+      esp_err_t result = esp_now_send(knownPeers[i], (uint8_t *)currentMessage.c_str(), currentMessage.length());
+      Serial.printf("📡 Sent to %s: %s %s\n",
+                    macToString(knownPeers[i]).c_str(),
+                    currentMessage.c_str(),
+                    result == ESP_OK ? "✅" : "❌");
+
+      if (result == ESP_OK) sent = true;
+    }
+
+    // Fallback to broadcast if nothing was sent or no peers
+    if (!sent || peerCount == 0) {
+      Serial.println("📡 No peers or failed sends. Broadcasting message.");
+      esp_now_send(broadcastMAC, (uint8_t *)currentMessage.c_str(), currentMessage.length());
+    }
+
+    lastEspNowMessage = currentMessage;
   }
 
   else if (device == "app" && deviceRole == PRIMARY) {
@@ -1166,15 +1323,16 @@ void sendData(const String &device, const String &type, const String &data) {
       currentMessage = type + ":" + data + ";";
     }
 
-    // Check if the current message is different from the last sent message
-    if (currentMessage != lastAppMessage) {
+    if (currentMessage != lastAppMessage && savedRole == "PRIMARY") {
       updateBluetoothData(currentMessage);
-      Serial.println("Sending to app: " + currentMessage);
-
-      // Update the last sent message
+      Serial.println("📱 Sending to app: " + currentMessage);
       lastAppMessage = currentMessage;
     } else {
-      Serial.println("Duplicate App message detected. Skipping send.");
+      if (deviceRole == PRIMARY) {
+        Serial.println("⚠️ Duplicate App message detected. Skipping send.");
+      } else {
+        Serial.println("⚠️ This is the SECONDARY. Skipping send.");
+      }
     }
   }
 }
@@ -1182,7 +1340,7 @@ void sendData(const String &device, const String &type, const String &data) {
 void updateBluetoothData(String data) {
   if (deviceRole != PRIMARY || pCharacteristic == nullptr) return;  // Prevent crash
 
-  const int maxChunkSize = 20;                                             // Maximum BLE payload size is 20 bytes
+  const int maxChunkSize = 250;                                            // Maximum BLE payload size is 20 bytes
   String message = data;                                                   // Full message to send
   int totalChunks = (message.length() + maxChunkSize - 1) / maxChunkSize;  // Total number of chunks
 
@@ -1196,6 +1354,122 @@ void updateBluetoothData(String data) {
     pCharacteristic->notify();                 // Send the chunk via BLE notification
     delay(20);                                 // Delay to avoid congestion
   }
+}
+
+void startOtaUpdate(String firmwareUrl) {
+  setupWiFi();
+  delay(3000);
+  if (WiFi.status() == WL_CONNECTED && savedRole == "PRIMARY") {
+    String jsonUrl = firmwareUrl + "/cornhole_board_version.json";
+
+    if (savedRole == "PRIMARY") {
+      Serial.println("📡 PRIMARY checking for OTA update...");
+      Serial.println("Connecting to: " + jsonUrl);
+
+      WiFiClientSecure client;
+      client.setInsecure();  // <-- required to bypass SSL cert check for GitHub
+
+      HTTPClient http;
+
+      if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("❌ Not connected to WiFi. Skipping OTA check.");
+        return;
+      }
+
+      delay(500);  // allow connection stack to settle
+
+      Serial.println("⏳ Attempting secure connection...");
+      bool ok = http.begin(client, jsonUrl);
+      if (!ok) {
+        Serial.println("❌ http.begin() failed — likely DNS/TLS error");
+        return;
+      }
+
+      if (!http.begin(client, jsonUrl)) {
+        Serial.println("❌ HTTPClient begin() failed.");
+        return;
+      }
+
+      int httpCode = http.GET();
+      if (httpCode != 200) {
+        Serial.println("❌ Failed to fetch version file. HTTP code: " + String(httpCode));
+        http.end();
+        return;
+      }
+
+      String payload = http.getString();
+      Serial.println("✅ Raw JSON Payload:\n" + payload);
+
+      DynamicJsonDocument doc(1024);
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error) {
+        Serial.println("❌ JSON parse error: " + String(error.c_str()));
+        http.end();
+        return;
+      }
+
+      String binName = doc["bin"];
+      String version = doc["version"];
+      String file_url = doc["file_url"];
+      String binUrl = file_url + binName;
+
+      Serial.println("🔄 New Version: " + version);
+      Serial.println("📥 Downloading: " + binUrl);
+
+      http.end();
+
+      // Download .bin to SPIFFS
+      if (downloadFirmwareToSPIFFS(binUrl, "/update.bin")) {
+        Serial.println("✅ Firmware saved to SPIFFS.");
+
+        // Serve the .bin locally
+        server.on("/update.bin", HTTP_GET, [](AsyncWebServerRequest *request) {
+          request->send(SPIFFS, "/update.bin", "application/octet-stream");
+        });
+
+        server.begin();
+        Serial.println("🌐 Hosting firmware at /update.bin");
+
+        // Notify secondary to update
+        sendData("espNow", "BEGIN_OTA", "http://" + ipAddress + "/update.bin");
+      } else {
+        Serial.println("❌ Failed to download firmware.");
+      }
+    }
+  }
+}
+
+void performHttpOtaUpdate(String url) {
+  Serial.println("🔄 Starting OTA from: " + url);
+  HTTPClient http;
+  http.begin(url);
+  int httpCode = http.GET();
+
+  if (httpCode == 200) {
+    int contentLength = http.getSize();
+    bool canBegin = Update.begin(contentLength);
+
+    if (canBegin) {
+      WiFiClient *stream = http.getStreamPtr();
+      size_t written = Update.writeStream(*stream);
+
+      if (written == contentLength) {
+        Serial.println("✅ OTA Success!");
+        if (Update.end()) {
+          Serial.println("🔁 Restarting...");
+          ESP.restart();
+        }
+      } else {
+        Serial.println("❌ Incomplete OTA write.");
+      }
+    } else {
+      Serial.println("❌ Not enough space for OTA.");
+    }
+  } else {
+    Serial.println("❌ Failed to GET firmware. HTTP code: " + String(httpCode));
+  }
+
+  http.end();
 }
 
 // ---------------------- Button Callback Functions ----------------------
@@ -1212,6 +1486,7 @@ void singleClick() {
     sendData("app", "ColorIndex", String(colorIndex));
   }
   Serial.println("Single Click: Color changed to index " + String(colorIndex));
+  lastUserActivityTime = millis();
 }
 
 void doubleClick() {
@@ -1226,22 +1501,27 @@ void doubleClick() {
     sendData("app", "Effect", effects[effectIndex]);
   }
   Serial.println("Double Click: Effect changed to " + effects[effectIndex]);
+  lastUserActivityTime = millis();
 }
 
 void longPress() {
-  toggleLights(!lightsOn);
-  sendData("espNow", "toggleLights", lightsOn ? "on" : "off");
+  Serial.println("Long Press: Entering deep sleep...");
 
+  sendData("espNow", "toggleDeepSleep", "SLEEP");
   if (deviceRole == PRIMARY) {
-    sendData("app", "toggleLights", lightsOn ? "on" : "off");
+    sendData("app", "toggleDeepSleep", "SLEEP");
   }
 
-  Serial.println("Long Press: Lights turned " + String(lightsOn ? "on" : "off"));
+  FastLED.clear(true);  // Clears all LEDs and shows black
+  delay(100);           // Ensure it gets shown before sleeping    delay(100);  // allow message to print
+  esp_deep_sleep_start();
 }
 
 // ---------------------- Utility Functions ----------------------
+
 void toggleLights(bool status) {
   lightsOn = status;
+  if (status) lastUserActivityTime = millis();
   ledEffects.setColor(lightsOn ? currentColor : CRGB::Black);  // Set color if on, black if off
   String message = String(status ? "on" : "off");
 
@@ -1302,8 +1582,25 @@ void handleIRSensor() {
     effectStartTime = millis();
     effectRunning = true;
     irTriggered = true;
+
+    // Turn lights on if they were off
+    if (!lightsOn) {
+      lightsOn = true;
+      toggleLights(true);
+      sendData("espNow", "toggleLights", "on");
+      if (deviceRole == PRIMARY) {
+        sendData("app", "toggleLights", "on");
+      }
+      Serial.println("IR Trigger: Lights were off — turning on.");
+    }
+
     ledEffects.celebrationEffect();
     Serial.println("IR Sensor Triggered: Celebration Effect Started");
+
+    while (millis() - effectStartTime < effectDuration) {
+      ledEffects.celebrationEffect();
+      delay(20);  // adjust to match animation frame rate
+    }
   }
 
   if (effectRunning && (millis() - effectStartTime >= effectDuration)) {
@@ -1312,6 +1609,7 @@ void handleIRSensor() {
     ledEffects.setColor(currentColor);
     Serial.println("IR Sensor Triggered: Celebration Effect Ended");
   }
+  lastUserActivityTime = millis();
 }
 
 // ---------------------- Battery Monitoring Functions ----------------------
