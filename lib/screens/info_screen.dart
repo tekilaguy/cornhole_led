@@ -10,7 +10,46 @@ import '/widgets/status_indicators.dart';
 import 'home_screen.dart'; // For accessing HomeScreenState
 
 class InfoScreen extends StatefulWidget {
-  const InfoScreen({super.key});
+  final bool wifiEnabled;
+  final bool lightsOn;
+  final bool espNowEnabled;
+  final bool isConnected;
+  final String connectionInfo;
+  final String boardRole1;
+  final String nameBoard1;
+  final String macAddrBoard1;
+  final String ipAddrBoard1;
+  final int batteryLevelBoard1;
+  final int  batteryVoltageBoard1;
+  final String boardRole2;
+  final String nameBoard2;
+  final String macAddrBoard2;
+  final String ipAddrBoard2;
+  final int batteryLevelBoard2;
+  final int batteryVoltageBoard2;
+  final Function(String) sendCommand;
+
+  const InfoScreen({
+    super.key,
+    required this.wifiEnabled,
+    required this.lightsOn,
+    required this.espNowEnabled,
+    required this.isConnected,
+    required this.connectionInfo,
+    required this.boardRole1,
+    required this.nameBoard1,
+    required this.macAddrBoard1,
+    required this.ipAddrBoard1,
+    required this.batteryLevelBoard1,
+    required this.batteryVoltageBoard1,
+    required this.boardRole2,
+    required this.nameBoard2,
+    required this.macAddrBoard2,
+    required this.ipAddrBoard2,
+    required this.batteryLevelBoard2,
+    required this.batteryVoltageBoard2,
+    required this.sendCommand,
+  });
 
   @override
   InfoScreenState createState() => InfoScreenState();
@@ -79,8 +118,8 @@ class InfoScreenState extends State<InfoScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirm Sleep'),
-        content: const Text(
-            'Are you sure you want to put the Cornhole to Sleep?'),
+        content:
+            const Text('Are you sure you want to put the Cornhole to Sleep?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -150,28 +189,6 @@ class InfoScreenState extends State<InfoScreen> {
         return false; // Prevent default pop action
       },
       child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.blue,
-          elevation: 0,
-          title: const Text('Information'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: onBackButtonPressed,
-          ),
-          actions: [
-            Center(
-              child: Row(
-                children: [
-                  const SizedBox(width: 5),
-                  IconButton(
-                    icon: const Icon(Icons.settings),
-                    onPressed: homeScreenState?.navigateToSetupScreen,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
         body: Stack(
           children: [
             const Background(),
@@ -314,14 +331,16 @@ class InfoScreenState extends State<InfoScreen> {
         Column(
           children: [
             const Text(
-              'Updates',
+              'Check for updates',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold),
             ),
             ElevatedButton(
-              onPressed: updateOta,
+              onPressed: () {
+                Navigator.pushNamed(context, '/ota');
+              },
               child: const Icon(Icons.system_update_alt, size: 30),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,

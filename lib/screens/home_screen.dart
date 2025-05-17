@@ -530,7 +530,10 @@ class HomeScreenState extends State<HomeScreen> {
 // Inside HomeScreenState class
 
   void navigateToInfoScreen() async {
-    final result = await Navigator.pushNamed(context, '/info', arguments: {
+    final result = await Navigator.pushNamed(
+      context, 
+      '/info', 
+      arguments: {
       'wifiEnabled': wifiEnabled,
       'lightsOn': lightsOn,
       'espNowEnabled': espNowEnabled,
@@ -595,30 +598,6 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: Colors.blue,
-        elevation: 0,
-        title: const Center(
-          child: Text(
-            'Cornhole LED Controller',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        actions: [
-          Center(
-            child: Row(
-              children: [
-                const SizedBox(width: 5),
-                IconButton(
-                  icon: const Icon(Icons.info),
-                  onPressed: navigateToInfoScreen,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
       body: Stack(
         children: [
           const Background(),

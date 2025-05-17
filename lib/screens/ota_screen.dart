@@ -1,7 +1,13 @@
 // ota_screen.dart
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
+import 'package:provider/provider.dart';
+import '/global.dart';
+import '/ble_provider.dart';
+import 'home_screen.dart';
+
 import '/widgets/background.dart';
+import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
 
 class OTAScreen extends StatefulWidget {
@@ -12,87 +18,107 @@ class OTAScreen extends StatefulWidget {
 }
 
 class OTAScreenState extends State<OTAScreen> {
-  bool isUpdating = false;
-  String updateStatus = "No updates available.";
   final Logger logger = Logger();
+  bool _isUpdating = false;
+  List<String> logs = [];
 
-  void checkForUpdates() async {
+  @override
+  void initState() {
+    super.initState();
+    otaScreenState = this;
+  }
+
+  void logMessage(String message) {
     setState(() {
-      isUpdating = true;
-      updateStatus = "Checking for updates...";
-    });
-
-    // Simulate checking for updates (replace with actual OTA logic)
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      isUpdating = false;
-      updateStatus = "Update available: Version 1.1.0";
+      logs.add(message);
     });
   }
 
-  void startOTAUpdate() async {
+  void startOtaProcess() {
     setState(() {
-      isUpdating = true;
-      updateStatus = "Starting update...";
+      _isUpdating = true;
+      logs.clear();
     });
+    final bleProvider = Provider.of<BLEProvider>(context, listen: false);
+    bleProvider.sendCommand("OTA:START;");
+  }
 
-    // Simulate OTA update process (replace with actual OTA logic)
-    await Future.delayed(const Duration(seconds: 5));
-
-    setState(() {
-      isUpdating = false;
-      updateStatus = "Update complete. Restarting device...";
-    });
-
-    // Simulate device restart
-    await Future.delayed(const Duration(seconds: 2));
-    logger.i("Device restarted after OTA update.");
+  void handleOtaStatusUpdate(String status) {
+    logMessage(status);
+    if (status.contains("Finished") ||
+        status.contains("failed") ||
+        status.contains("low")) {
+      setState(() {
+        _isUpdating = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("OTA Update"),
-      ),
       body: Stack(
         children: [
           const Background(),
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                const Text(
-                  "OTA Update",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
+                Expanded(
+                  child: isConnected ? buildControlScreen() : const HomeScreen(),
                 ),
-                const SizedBox(height: 20),
-                Text(updateStatus),
-                const SizedBox(height: 20),
-                if (!isUpdating) ...[
-                  ElevatedButton(
-                    onPressed: checkForUpdates,
-                    child: const Text("Check for Updates"),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: startOTAUpdate,
-                    child: const Text("Start Update"),
-                  ),
-                ] else ...[
-                  const CircularProgressIndicator(),
-                ],
-                const SizedBox(height: 20),
                 const StatusIndicators(),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget buildControlScreen() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Section(
+          title: 'OTA Controls',
+          content: Column(
+            children: [
+              const SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: _isUpdating ? null : startOtaProcess,
+                child: const Text("Start OTA Update"),
+              ),
+              const SizedBox(height: 10),
+              const Divider(thickness: 1.5),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  "Update Log",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListView.builder(
+                  itemCount: logs.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+                    child: Text(
+                      logs[index],
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

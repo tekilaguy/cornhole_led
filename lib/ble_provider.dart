@@ -176,22 +176,39 @@ class BLEProvider with ChangeNotifier {
     });
   }
 
-  Future<void> connectToDevice(BluetoothDevice device) async {
-    logger.i("Connecting to device: ${device.platformName}");
-    try {
-      if (Platform.isIOS) {
-        await Future.delayed(
-            const Duration(seconds: 1)); // Small delay for stability
-      }
-      await device.connect(autoConnect: false);
-      FlutterBluePlus.stopScan();
-      manageBluetoothState(device); // Consolidate state management
-    } catch (e) {
-      logger.e("Cannot connect, exception occurred: $e");
-      _isConnected = false;
-      notifyListeners();
+Future<void> connectToDevice(BluetoothDevice device) async {
+  logger.i("Connecting to device: ${device.platformName}");
+  try {
+    await device.disconnect(); // always try to reset
+
+    if (Platform.isIOS) {
+      await Future.delayed(const Duration(milliseconds: 500));
     }
+
+    const maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await device.connect(autoConnect: false);
+        FlutterBluePlus.stopScan();
+        manageBluetoothState(device);
+        logger.i("Connected on attempt $attempt");
+        return;
+      } catch (e) {
+        logger.w("Connect attempt $attempt failed: $e");
+        await Future.delayed(const Duration(seconds: 2));
+      }
+    }
+
+    _isConnected = false;
+    notifyListeners();
+    logger.e("Failed to connect after $maxAttempts attempts");
+
+  } catch (e) {
+    logger.e("Connection setup error: $e");
+    _isConnected = false;
+    notifyListeners();
   }
+}
 
   Future<void> attemptReconnection(BluetoothDevice device) async {
     if (isReconnecting || isConnected) return;
@@ -227,7 +244,7 @@ class BLEProvider with ChangeNotifier {
       // ①  Negotiate MTU
       final mtu = await MtuNegotiator().negotiate(device);
       // You can keep it in a field if you want to show it in the UI:
-       _negotiatedMtu = mtu;
+      _negotiatedMtu = mtu;
       //_negotiatedMtu = await MtuNegotiator().negotiate(device);
 
       // ②  Now discover services
@@ -488,8 +505,9 @@ class BLEProvider with ChangeNotifier {
 
   Future<void> sendLargeMessage(
       BluetoothCharacteristic characteristic, String message) async {
-    int chunkSize =
-        _negotiatedMtu  > 3 ? _negotiatedMtu  - 3 : 20; // Default to 20 if negotiation fails
+    int chunkSize = _negotiatedMtu > 3
+        ? _negotiatedMtu - 3
+        : 20; // Default to 20 if negotiation fails
     int messageLength = message.length;
     int totalChunks = (messageLength + chunkSize - 1) ~/ chunkSize;
 

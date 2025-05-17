@@ -372,15 +372,6 @@ class SetupScreenState extends State<SetupScreen> {
               return false;
             },
             child: Scaffold(
-              appBar: AppBar(
-                backgroundColor: Colors.blue,
-                elevation: 0,
-                title: const Text('Setup Screen'),
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: onBackButtonPressed,
-                ),
-              ),
               body: Stack(
                 children: [
                   const Background(),
