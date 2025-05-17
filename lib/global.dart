@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'screens/home_screen.dart';
-import 'screens/info_screen.dart';
+import 'screens/info_screen1.dart';
 import 'screens/setup_screen.dart';
 import 'screens/ota_screen.dart';
 

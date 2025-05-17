@@ -4,6 +4,7 @@ import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 //import 'package:provider/provider.dart';
 
 import 'home_screen.dart';
+import 'info_screen1.dart';
 import 'info_screen.dart';
 import 'setup_screen.dart';
 import 'ota_screen.dart';
@@ -28,6 +29,7 @@ class _TabScreenState extends State<TabScreen> {
 
     _screens = [
       const HomeScreen(),
+      const InfoScreenTest(),
       InfoScreen(
         wifiEnabled: wifiEnabled,
         lightsOn: lightsOn,
@@ -75,8 +77,9 @@ class _TabScreenState extends State<TabScreen> {
         Scaffold(
           appBar: AppBar(
             backgroundColor: Colors.blue,
-            elevation: 0,
-            title: const Text('Cornhole LED Controller'),
+            elevation: 4,
+            title:  const Text('Cornhole LED Controller'),
+            
           ),
           backgroundColor: Colors.transparent,
           body: _screens[_currentIndex],
@@ -90,6 +93,7 @@ class _TabScreenState extends State<TabScreen> {
             animationDuration: const Duration(milliseconds: 300),
             items: const <Widget>[
               Icon(Icons.home, size: 30, color: Colors.white),
+              Icon(Icons.car_crash, size: 30, color: Colors.white),
               Icon(Icons.info, size: 30, color: Colors.white),
               Icon(Icons.update, size: 30, color: Colors.white),
               Icon(Icons.settings, size: 30, color: Colors.white),
