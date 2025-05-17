@@ -106,7 +106,7 @@ class HomeScreenState extends State<HomeScreen> {
         await device.connect();
       } else {
         await device.connect(autoConnect: false);
-        await device.requestMtu(240);
+        await device.requestMtu(512);
       }
       manageBluetoothState(device); // Consolidate state management
 

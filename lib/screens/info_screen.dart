@@ -20,7 +20,7 @@ class InfoScreen extends StatefulWidget {
   final String macAddrBoard1;
   final String ipAddrBoard1;
   final int batteryLevelBoard1;
-  final int  batteryVoltageBoard1;
+  final int batteryVoltageBoard1;
   final String boardRole2;
   final String nameBoard2;
   final String macAddrBoard2;
@@ -74,19 +74,24 @@ class InfoScreenState extends State<InfoScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    final args =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final args = ModalRoute.of(context)!.settings.arguments;
+    if (args is Map<String, dynamic>) {
+      // proceed
 
-    if (macAddrBoard1.isEmpty && macAddrBoard2.isEmpty) {
-      wifiEnabled = args['wifiEnabled'] as bool? ?? true;
-      lightsOn = args['lightsOn'] as bool? ?? false;
-      espNowEnabled = args['espNowEnabled'] as bool? ?? false;
+      if (macAddrBoard1.isEmpty && macAddrBoard2.isEmpty) {
+        wifiEnabled = args['wifiEnabled'] as bool? ?? true;
+        lightsOn = args['lightsOn'] as bool? ?? false;
+        espNowEnabled = args['espNowEnabled'] as bool? ?? false;
 
-      homeScreenState = args['homeScreenState'] as HomeScreenState?;
+        homeScreenState = args['homeScreenState'] as HomeScreenState?;
 
-      if (homeScreenState != null) {
-        homeScreenState!.sendCommand('GET_INFO;');
+        if (homeScreenState != null) {
+          homeScreenState!.sendCommand('GET_INFO;');
+        }
       }
+    } else {
+      logger.e(
+          "Expected arguments of type Map<String, dynamic>, got ${args.runtimeType}");
     }
   }
 
@@ -314,34 +319,6 @@ class InfoScreenState extends State<InfoScreen> {
             ElevatedButton(
               onPressed: toggleDeepSleep,
               child: const Icon(Icons.power, size: 30),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                elevation: 25,
-                shadowColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(50),
-                  side: const BorderSide(color: Colors.black, width: .5),
-                ),
-                padding: const EdgeInsets.all(20),
-              ),
-            ),
-          ],
-        ),
-        Column(
-          children: [
-            const Text(
-              'Check for updates',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/ota');
-              },
-              child: const Icon(Icons.system_update_alt, size: 30),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
                 foregroundColor: Colors.white,

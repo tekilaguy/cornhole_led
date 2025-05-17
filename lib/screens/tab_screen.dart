@@ -73,6 +73,11 @@ class _TabScreenState extends State<TabScreen> {
       children: [
         const Background(),
         Scaffold(
+          appBar: AppBar(
+            backgroundColor: Colors.blue,
+            elevation: 0,
+            title: const Text('Cornhole LED Controller'),
+          ),
           backgroundColor: Colors.transparent,
           body: _screens[_currentIndex],
           bottomNavigationBar: CurvedNavigationBar(

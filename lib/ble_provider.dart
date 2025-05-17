@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'global.dart';
 import 'dart:io';
-import 'ble_mtu.dart';
+//import 'ble_mtu.dart';
 
 class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
@@ -37,7 +37,7 @@ class BLEProvider with ChangeNotifier {
   bool get espNowEnabled => _espNowEnabled;
   Color get initialStartupColor => _initialStartupColor;
 
-  int _negotiatedMtu = 23; // default BLE MTU
+  int _negotiatedMtu = 512; // default BLE MTU
   int get negotiatedMtu => _negotiatedMtu;
 
   // Board 1
@@ -176,39 +176,34 @@ class BLEProvider with ChangeNotifier {
     });
   }
 
-Future<void> connectToDevice(BluetoothDevice device) async {
-  logger.i("Connecting to device: ${device.platformName}");
-  try {
-    await device.disconnect(); // always try to reset
-
-    if (Platform.isIOS) {
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-
-    const maxAttempts = 3;
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        await device.connect(autoConnect: false);
-        FlutterBluePlus.stopScan();
-        manageBluetoothState(device);
-        logger.i("Connected on attempt $attempt");
-        return;
-      } catch (e) {
-        logger.w("Connect attempt $attempt failed: $e");
-        await Future.delayed(const Duration(seconds: 2));
+  Future<void> connectToDevice(BluetoothDevice device) async {
+    logger.i("Connecting to device: ${device.platformName}");
+    try {
+      if (Platform.isIOS) {
+        await Future.delayed(const Duration(seconds: 1)); // iOS stability delay
       }
+
+      await device.connect(autoConnect: false);
+      FlutterBluePlus.stopScan();
+      await Future.delayed(Duration(milliseconds: 500)); // allow iOS sync
+
+      if (Platform.isAndroid) {
+        // Only Android supports MTU negotiation
+        try {
+          await device.requestMtu(512); // Use a safe high value
+          logger.i("MTU requested");
+        } catch (e) {
+          logger.w("MTU negotiation failed: $e");
+        }
+      }
+
+      manageBluetoothState(device); // Now safe to manage state
+    } catch (e) {
+      logger.e("Cannot connect, exception occurred: $e");
+      _isConnected = false;
+      notifyListeners();
     }
-
-    _isConnected = false;
-    notifyListeners();
-    logger.e("Failed to connect after $maxAttempts attempts");
-
-  } catch (e) {
-    logger.e("Connection setup error: $e");
-    _isConnected = false;
-    notifyListeners();
   }
-}
 
   Future<void> attemptReconnection(BluetoothDevice device) async {
     if (isReconnecting || isConnected) return;
@@ -242,10 +237,10 @@ Future<void> connectToDevice(BluetoothDevice device) async {
   Future<void> discoverServices(BluetoothDevice device) async {
     try {
       // ①  Negotiate MTU
-      final mtu = await MtuNegotiator().negotiate(device);
+      // ignore: unused_local_variable
+      //final mtu = await MtuNegotiator().negotiate(device);
       // You can keep it in a field if you want to show it in the UI:
-      _negotiatedMtu = mtu;
-      //_negotiatedMtu = await MtuNegotiator().negotiate(device);
+      _negotiatedMtu = await device.requestMtu(512);
 
       // ②  Now discover services
       List<BluetoothService> services = await device.discoverServices();
