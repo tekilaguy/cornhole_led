@@ -141,10 +141,11 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       body: Stack(
         children: [
           const Background(),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-                child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 20),
                   // ignore: unnecessary_null_comparison
@@ -155,7 +156,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                   const StatusIndicators(),
                 ],
               ),
-            
+            ),
           ),
         ],
       ),

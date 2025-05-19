@@ -158,10 +158,11 @@ class InfoScreenState extends State<InfoScreen>
         body: Stack(
           children: [
             const Background(),
-            Padding(
-              padding: const EdgeInsets.all(5.0),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 20),
                   context.watch<BLEProvider>().isConnected
@@ -172,7 +173,7 @@ class InfoScreenState extends State<InfoScreen>
                   
                 ],
               ),
-            ),
+          ),),
           ],
         ),
       ),
@@ -232,7 +233,7 @@ class InfoScreenState extends State<InfoScreen>
         const SizedBox(height: 15),
         Section(
           title: 'Connection Information',
-          content: buildConnectionTableCompact(),
+          content: buildConnectionInfoList(),
         ),
         ElevatedButton(
           onPressed: () => bleProvider.sendCommand("GET_INFO;"),
@@ -463,74 +464,6 @@ class InfoScreenState extends State<InfoScreen>
       }).toList(),
     );
   }
-
-
-Widget buildConnectionTableCompact() {
-  final boards = context.watch<BLEProvider>().boards;
-
-  return Table(
-    columnWidths: const {
-      0: IntrinsicColumnWidth(),
-      1: FlexColumnWidth(),
-      2: IntrinsicColumnWidth(),
-      3: IntrinsicColumnWidth(),
-      4: FlexColumnWidth(),
-    },
-    border: TableBorder.all(color: Colors.white30),
-    children: [
-      TableRow(
-        decoration: const BoxDecoration(color: Colors.blueGrey),
-        children: const [
-          Padding(
-            padding: EdgeInsets.all(6),
-            child: Text("Role", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          Padding(
-            padding: EdgeInsets.all(6),
-            child: Text("Name", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          Padding(
-            padding: EdgeInsets.all(6),
-            child: Text("Batt", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          Padding(
-            padding: EdgeInsets.all(6),
-            child: Text("Ver", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          Padding(
-            padding: EdgeInsets.all(6),
-            child: Text("MAC", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-      ...boards.map((board) => TableRow(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text(board.role, style: const TextStyle(color: Colors.white)),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text(board.name, style: const TextStyle(color: Colors.white)),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text('${board.batteryLevel}%', style: const TextStyle(color: Colors.white)),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text(board.version, style: const TextStyle(color: Colors.white)),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: Text(board.mac, style: const TextStyle(color: Colors.white, fontSize: 10)),
-              ),
-            ],
-          ))
-    ],
-  );
-}
-
 
   Widget batteryIcon(int level) {
     IconData icon;

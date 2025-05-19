@@ -106,8 +106,16 @@ class BLEProvider with ChangeNotifier {
     return 0; // Placeholder
   }
 
-  void updateBoards(List<BoardInfo> newBoards) {
-    _boards = newBoards;
+  void updateBoards(List<BoardInfo> incomingBoards) {
+    final Map<String, BoardInfo> uniqueBoards = {
+      for (var board in _boards) board.mac: board, // keep existing
+    };
+
+    for (var board in incomingBoards) {
+      uniqueBoards[board.mac] = board; // overwrite if same MAC
+    }
+
+    _boards = uniqueBoards.values.toList();
     notifyListeners();
   }
 
@@ -392,7 +400,8 @@ class BLEProvider with ChangeNotifier {
         }
       }
 
-      _boards = updatedBoards;
+updateBoards(updatedBoards);
+
     } catch (e) {
       logger.e("Error handling notification: $e");
       connectionInfo = "Error parsing notification";

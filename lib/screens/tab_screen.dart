@@ -1,6 +1,9 @@
 // tab_screen.dart
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 //import 'package:provider/provider.dart';
 
@@ -73,11 +76,50 @@ class _TabScreenState extends State<TabScreen> {
       children: [
         const Background(),
         Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.blue,
-            elevation: 4,
-            title: const Center(child: Text('Cornhole LED Controller'),),
+ appBar: AppBar(
+  backgroundColor: Colors.blue,
+  elevation: 4,
+  title: const Center(child: Text('Cornhole LED Controller')),
+  actions: [
+    IconButton(
+      icon: const Icon(Icons.power_settings_new, color: Colors.red),
+      tooltip: 'Sleep & Exit',
+      onPressed: () async {
+        // Confirm first
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Confirm Exit"),
+            content: const Text("Put the board to sleep and exit the app?"),
+            actions: [
+              TextButton(
+                child: const Text("Cancel"),
+                onPressed: () => Navigator.of(ctx).pop(false),
+              ),
+              TextButton(
+                child: const Text("Confirm"),
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+            ],
           ),
+        );
+
+        if (confirmed == true) {
+          bleProvider.sendDeepSleep();
+          await Future.delayed(const Duration(milliseconds: 800));
+          // Exit app
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (Platform.isAndroid) {
+              SystemNavigator.pop();
+            } else if (Platform.isIOS) {
+              exit(0); // not recommended by Apple, but functional
+            }
+          });
+        }
+      },
+    ),
+  ],
+),
           backgroundColor: Colors.transparent,
           body: _screens![_currentIndex],
           bottomNavigationBar: CurvedNavigationBar(

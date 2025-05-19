@@ -526,19 +526,19 @@ class SetupScreenState extends State<SetupScreen>
           Row(
             children: [
               Expanded(
-                child: buildSliderInput(
-                  "Effects Size",
-                  blockSize,
-                  1,
-                  30,
-                  1,
-                  (value) {
-                    setState(() {
-                      blockSize = value;
-                    });
-                  },
-                ),
-              ),
+                child:           buildSliderInput(
+            "Initial Brightness",
+            initialBrightness,
+            0,
+            100,
+            1,
+            (value) {
+              setState(() {
+                initialBrightness = value;
+              });
+            },
+          ),
+             ),
               const SizedBox(width: 20),
               Expanded(
                 child: buildSliderInput(
@@ -610,7 +610,7 @@ class SetupScreenState extends State<SetupScreen>
               const SizedBox(width: 20),
               Expanded(
                 child: buildSliderInput(
-                  "Inactivity Timeout (minutes)",
+                  "Timeout (minutes)",
                   inactivityTimeout,
                   0,
                   60,
