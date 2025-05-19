@@ -26,13 +26,11 @@ class BLEProvider with ChangeNotifier {
   static const reconnectDuration = Duration(seconds: 30);
 
   bool _isConnected = false;
-  bool _wifiEnabled = true;
   bool _lightsOn = true;
   bool _espNowEnabled = true;
   Color _initialStartupColor = Colors.blue;
 
   bool get isConnected => _isConnected;
-  bool get wifiEnabled => _wifiEnabled;
   bool get lightsOn => _lightsOn;
   bool get espNowEnabled => _espNowEnabled;
   Color get initialStartupColor => _initialStartupColor;
@@ -78,13 +76,12 @@ class BLEProvider with ChangeNotifier {
   String get ssid => _ssid;
   String get password => _password;
 
+  List<BoardInfo> _boards = [];
+  List<BoardInfo> get boards => _boards;
+  List<BoardInfo> get connectedBoards => _boards;
+
   void setConnected(bool value) {
     _isConnected = value;
-    notifyListeners();
-  }
-
-  void setWifiEnabled(bool value) {
-    _wifiEnabled = value;
     notifyListeners();
   }
 
@@ -107,6 +104,11 @@ class BLEProvider with ChangeNotifier {
   int getColorIndexFromRGB(int r, int g, int b) {
     // Implement this function based on your app's logic
     return 0; // Placeholder
+  }
+
+  void updateBoards(List<BoardInfo> newBoards) {
+    _boards = newBoards;
+    notifyListeners();
   }
 
   BLEProvider() {
@@ -253,7 +255,9 @@ class BLEProvider with ChangeNotifier {
           if (characteristic.properties.notify) {
             notifyCharacteristic = characteristic;
             await notifyCharacteristic?.setNotifyValue(true);
+            logger.i("✅ Notify characteristic enabled");
             notifyCharacteristic?.lastValueStream.listen((value) {
+              logger.i("📥 Notification received");
               onValueReceived(value);
             });
           }
@@ -277,14 +281,15 @@ class BLEProvider with ChangeNotifier {
     });
 
     scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
-      final newDevices = results
-          .map((r) => r.device)
-          .where((device) => device.platformName.isNotEmpty)
-          .toSet()
-          .difference(devicesList.toSet());
-      devicesList.addAll(newDevices);
-      if (newDevices.isNotEmpty) {
-        notifyListeners();
+      for (ScanResult result in results) {
+        final dev = result.device;
+        if (dev.platformName.contains("CornholeBT")) {
+          logger.i("Found CornholeBT, attempting connection...");
+          FlutterBluePlus.stopScan();
+          device = dev;
+          connectToDevice(device!);
+          break;
+        }
       }
     });
   }
@@ -314,129 +319,155 @@ class BLEProvider with ChangeNotifier {
     logger.i("Received notification: $value");
 
     try {
+      // Fast path: Color/Effect messages
       if (value.startsWith("ColorIndex:")) {
-        // Extract the color index value
         String indexStr = value.substring("ColorIndex:".length).trim();
         int? colorIndex = int.tryParse(indexStr);
         if (colorIndex != null) {
-          // Update your app's color index
           activeColorIndex = colorIndex;
           logger.i("Color index updated to: $colorIndex");
-          // Optionally, update the UI or perform additional actions
-        } else {
-          logger.w("Invalid color index received: $indexStr");
         }
         return;
       } else if (value.startsWith("Effect:")) {
-        // Extract the effect value
         String effect = value.substring("Effect:".length).trim();
-        // Update your app's effect
         activeEffect = effect;
         logger.i("Effect updated to: $effect");
-        // Optionally, update the UI or perform additional actions
         return;
       }
 
-      // Proceed to process the message
+      // Legacy settings response
       if (value.startsWith("S:")) {
         handleSettingsResponse(value.substring(2));
         return;
       }
 
-      // Split the entire message by `;` to get fields
-      List<String> fields = value.split(';');
-      for (var field in fields) {
-        if (field.isEmpty) continue;
+      // New structured board info format: r1:...;n1:...;...
+      final Map<int, Map<String, String>> boardData = {};
+      final fields = value.split(';');
 
-        int colonIndex = field.indexOf(':');
-        if (colonIndex == -1) {
-          logger.w("Malformed field: $field");
-          continue;
-        }
+      for (String field in fields) {
+        if (field.isEmpty || !field.contains(':')) continue;
 
-        String tag = field.substring(0, colonIndex);
-        String fieldValue = field.substring(colonIndex + 1);
+        final parts = field.split(':');
+        if (parts.length != 2) continue;
 
-        if (tag.length < 2) {
-          logger.w("Tag too short: $tag");
-          continue;
-        }
-        int boardNumber = int.tryParse(tag[1]) ?? -1;
-        if (boardNumber == -1) {
-          logger.w("Invalid board number in tag: $tag");
-          continue;
-        }
+        final tag = parts[0];
+        final val = parts[1];
 
-        // Use the first character of the tag to determine the field
-        String fieldTag = tag[0];
+        final match = RegExp(r'^([a-zA-Z]+)(\d+)$').firstMatch(tag);
+        if (match == null) continue;
 
-        // Handle the parsed field tag and value for each board
-        switch (fieldTag) {
-          case 'n':
-            if (boardNumber == 1) {
-              _nameBoard1 = fieldValue;
-              logger.i("Board 1 Name set to: $nameBoard1");
-            } else if (boardNumber == 2) {
-              _nameBoard2 = fieldValue;
-              logger.i("Board 2 Name set to: $nameBoard2");
-            }
-            break;
+        final key = match.group(1)!; // e.g., 'r', 'n', 'i', etc.
+        final index = int.tryParse(match.group(2)!);
+        if (index == null) continue;
 
-          case 'm':
-            if (boardNumber == 1) {
-              _macAddrBoard1 = fieldValue;
-              logger.i("MAC Addr Board 1 set to: $macAddrBoard1");
-            } else if (boardNumber == 2) {
-              _macAddrBoard2 = fieldValue;
-              logger.i("MAC Addr Board 2 set to: $macAddrBoard2");
-            }
-            break;
+        boardData.putIfAbsent(index, () => {});
+        boardData[index]![key] = val;
+      }
 
-          case 'i':
-            if (boardNumber == 1) {
-              _ipAddrBoard1 = fieldValue;
-              logger.i("IP Addr Board 1 set to: $ipAddrBoard1");
-            } else if (boardNumber == 2) {
-              _ipAddrBoard2 = fieldValue;
-              logger.i("IP Addr Board 2 set to: $ipAddrBoard2");
-            }
-            break;
+      final updatedBoards = [..._boards];
 
-          case 'l':
-            int batteryLevel = int.tryParse(fieldValue) ?? 0;
-            if (boardNumber == 1) {
-              _batteryLevelBoard1 = batteryLevel;
-              logger.i("Battery Level Board 1 set to: $batteryLevelBoard1%");
-            } else if (boardNumber == 2) {
-              _batteryLevelBoard2 = batteryLevel;
-              logger.i("Battery Level Board 2 set to: $batteryLevelBoard2%");
-            }
-            break;
+      for (final entry in boardData.entries) {
+        final index = entry.key;
+        final data = entry.value;
 
-          case 'v':
-            int batteryVoltage = int.tryParse(fieldValue) ?? 0;
-            if (boardNumber == 1) {
-              _batteryVoltageBoard1 = batteryVoltage;
-              logger
-                  .i("Battery Voltage Board 1 set to: $batteryVoltageBoard1 V");
-            } else if (boardNumber == 2) {
-              _batteryVoltageBoard2 = batteryVoltage;
-              logger
-                  .i("Battery Voltage Board 2 set to: $batteryVoltageBoard2 V");
-            }
-            break;
+        final newInfo = BoardInfo(
+          role: data['r'] ?? '',
+          name: data['n'] ?? 'Board $index',
+          mac: data['m'] ?? '',
+          batteryLevel: int.tryParse(data['l'] ?? '') ?? 0,
+          batteryVoltage: int.tryParse(data['v'] ?? '') ?? 0,
+          version: data['ver'] ?? '',
+        );
 
-          default:
-            logger.w("Unexpected field tag: $fieldTag");
-            break;
+        final existingIndex = updatedBoards
+            .indexWhere((b) => b.mac == newInfo.mac && newInfo.mac.isNotEmpty);
+
+        if (existingIndex != -1) {
+          // Update existing board
+          updatedBoards[existingIndex] = newInfo;
+        } else {
+          // Add new board
+          updatedBoards.add(newInfo);
         }
       }
-      notifyListeners();
+
+      _boards = updatedBoards;
     } catch (e) {
       logger.e("Error handling notification: $e");
       connectionInfo = "Error parsing notification";
       notifyListeners();
     }
+  }
+
+  Widget buildDeviceList() {
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        ElevatedButton(
+          onPressed: scanForDevices,
+          style: ElevatedButton.styleFrom(
+            foregroundColor: Colors.white,
+            backgroundColor: Colors.blue,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            shadowColor: Colors.black,
+            elevation: 5,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          child: const Text('Rescan for Devices'),
+        ),
+        const SizedBox(height: 20),
+        ListView.builder(
+          shrinkWrap: true,
+          itemCount: devicesList.length,
+          itemBuilder: (context, index) {
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ListTile(
+                title: Text(
+                  devicesList[index].platformName.isNotEmpty
+                      ? devicesList[index].platformName
+                      : 'Unknown Device', // Provide a default value
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                trailing: ElevatedButton(
+                  onPressed: () {
+                    connectToDevice(devicesList[index]);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.blue,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    'Connect',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
 // Separate function for handling settings response
@@ -522,7 +553,7 @@ class BLEProvider with ChangeNotifier {
     activeColorIndex = colorIndex;
     notifyListeners();
 
-    sendCommand('colorIndex:$colorIndex;');
+    sendCommand('ColorIndex:$colorIndex;');
   }
 
   void sendEffect(String effect) {
@@ -540,13 +571,6 @@ class BLEProvider with ChangeNotifier {
     sendCommand("GET_SETTINGS;");
   }
 
-  void toggleWiFi() {
-    _wifiEnabled = !wifiEnabled;
-    logger.i("WiFi toggled: ${wifiEnabled ? 'on' : 'off'}");
-    sendCommand('toggleWiFi:${wifiEnabled ? 'on' : 'off'};');
-    notifyListeners();
-  }
-
   void toggleLights() {
     _lightsOn = !lightsOn;
     logger.i("Lights toggled: ${lightsOn ? 'on' : 'off'}");
@@ -559,6 +583,10 @@ class BLEProvider with ChangeNotifier {
     logger.i("ESP-NOW toggled: ${espNowEnabled ? 'on' : 'off'}");
     sendCommand('toggleEspNow:${espNowEnabled ? 'on' : 'off'};');
     notifyListeners();
+  }
+
+  void sendDeepSleep() {
+    sendCommand('toggleDeepSleep:SLEEP;');
   }
 
   void sendRestart() {
@@ -637,4 +665,24 @@ class BLEProvider with ChangeNotifier {
     _password = newPassword;
     notifyListeners();
   }
+}
+
+class BoardInfo {
+  final String role;
+  final String name;
+  final String mac;
+  final int batteryLevel;
+  final int batteryVoltage;
+  final String version;
+  bool isExpanded;
+
+  BoardInfo({
+    required this.role,
+    required this.name,
+    required this.mac,
+    required this.batteryLevel,
+    required this.batteryVoltage,
+    required this.version,
+    this.isExpanded = false, // default to false
+  });
 }

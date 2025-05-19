@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'screens/home_screen.dart';
-import 'screens/info_screen1.dart';
+import 'screens/info_screen.dart';
 import 'screens/setup_screen.dart';
 import 'screens/ota_screen.dart';
 
@@ -19,7 +19,6 @@ bool isReconnecting = false;
 // Connection and device status
 bool isConnected = false;
 String connectedDevice = '';
-bool wifiEnabled = true;
 bool lightsOn = true;
 bool espNowEnabled = true;
 int activeColorIndex = 0;

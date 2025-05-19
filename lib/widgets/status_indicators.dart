@@ -1,6 +1,8 @@
 // widgets/status_indicators.dart
 import 'package:flutter/material.dart';
-import '../global.dart';
+import 'package:provider/provider.dart';
+import '../ble_provider.dart';
+
 
 class StatusIndicators extends StatelessWidget {
   const StatusIndicators({
@@ -11,7 +13,7 @@ class StatusIndicators extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        isConnected
+        context.watch<BLEProvider>().isConnected
             ? const Text(
                 'Connected',
                 style:
@@ -22,11 +24,7 @@ class StatusIndicators extends StatelessWidget {
                 style: TextStyle(
                     color: Colors.red, fontWeight: FontWeight.bold),
               ),
-        Text(
-          'WiFi: ${wifiEnabled ? "Enabled" : "Disabled"}',
-          style: const TextStyle(
-              color: Colors.blue, fontWeight: FontWeight.bold),
-        ),
+       
         const Center(
           child: Text(
             '© Bluetrace Entertainment, LLC',

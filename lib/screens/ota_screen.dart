@@ -4,7 +4,6 @@ import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
 import '/global.dart';
 import '/ble_provider.dart';
-import 'home_screen.dart';
 
 import '/widgets/background.dart';
 import '/widgets/section.dart';
@@ -17,10 +16,16 @@ class OTAScreen extends StatefulWidget {
   OTAScreenState createState() => OTAScreenState();
 }
 
-class OTAScreenState extends State<OTAScreen> {
+class OTAScreenState extends State<OTAScreen>
+    with AutomaticKeepAliveClientMixin {
   final Logger logger = Logger();
   bool _isUpdating = false;
   List<String> logs = [];
+  BLEProvider get bleProvider =>
+      Provider.of<BLEProvider>(context, listen: false);
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -39,7 +44,6 @@ class OTAScreenState extends State<OTAScreen> {
       _isUpdating = true;
       logs.clear();
     });
-    final bleProvider = Provider.of<BLEProvider>(context, listen: false);
     bleProvider.sendCommand("OTA:START;");
   }
 
@@ -56,18 +60,22 @@ class OTAScreenState extends State<OTAScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       body: Stack(
         children: [
           const Background(),
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(5.0),
             child: Column(
               children: [
-                Expanded(
-                  child: isConnected ? buildControlScreen() : const HomeScreen(),
-                ),
+                const SizedBox(height: 20),
+                context.watch<BLEProvider>().isConnected
+                    ? buildControlScreen()
+                    : bleProvider.buildDeviceList(),
+                const SizedBox(height: 20),
                 const StatusIndicators(),
+                const SizedBox(height: 10), // Add some space at the bottom
               ],
             ),
           ),
@@ -107,7 +115,8 @@ class OTAScreenState extends State<OTAScreen> {
                 child: ListView.builder(
                   itemCount: logs.length,
                   itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0, vertical: 2.0),
                     child: Text(
                       logs[index],
                       style: const TextStyle(fontSize: 12),

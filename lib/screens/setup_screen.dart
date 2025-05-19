@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:numberpicker/numberpicker.dart';
+import 'package:provider/provider.dart';
 import '/global.dart';
-import 'home_screen.dart';
+import '/ble_provider.dart';
 import '/widgets/background.dart';
 import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
@@ -47,12 +48,14 @@ class SetupScreen extends StatefulWidget {
   SetupScreenState createState() => SetupScreenState();
 }
 
-class SetupScreenState extends State<SetupScreen> {
+class SetupScreenState extends State<SetupScreen>
+    with AutomaticKeepAliveClientMixin {
   final Logger logger = Logger();
+  BLEProvider get bleProvider =>
+      Provider.of<BLEProvider>(context, listen: false);
+
   late TextEditingController boardName1Controller;
   late TextEditingController boardName2Controller;
-  late TextEditingController ssidController;
-  late TextEditingController passwordController;
   bool setupComplete = false;
 
 // Previous settings for comparison
@@ -66,8 +69,9 @@ class SetupScreenState extends State<SetupScreen> {
   Color? previousInitialStartupColor;
   Color? previousSportEffectColor1;
   Color? previousSportEffectColor2;
-  String? previousssid;
-  String? previouspassword;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -79,8 +83,6 @@ class SetupScreenState extends State<SetupScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!setupComplete) {
-      ssid = widget.ssid;
-      password = widget.password;
       previousNameBoard1 = widget.nameBoard1;
       previousNameBoard2 = widget.nameBoard2;
       previousInitialBrightness = widget.initialBrightness;
@@ -92,8 +94,6 @@ class SetupScreenState extends State<SetupScreen> {
       previousSportEffectColor2 = widget.sportEffectColor2;
       previousInitialStartupColor = widget.initialStartupColor;
 
-      ssidController = TextEditingController(text: ssid);
-      passwordController = TextEditingController(text: password);
       boardName1Controller = TextEditingController(text: previousNameBoard1);
       boardName2Controller = TextEditingController(text: previousNameBoard2);
 
@@ -115,31 +115,6 @@ class SetupScreenState extends State<SetupScreen> {
     setState(() {
       isLoading = false;
     });
-  }
-
-  void saveWiFiSettings() {
-    final List<String> commands = [];
-
-    final currentssid = ssidController.text;
-    final currentpassword = passwordController.text;
-
-    if (currentssid != previousssid) {
-      commands.add('SSID:$currentssid');
-      previousssid = currentssid;
-    }
-    if (currentpassword != previouspassword) {
-      commands.add('PW:$currentpassword');
-      previouspassword = currentpassword;
-    }
-
-    if (commands.isNotEmpty && homeScreenState != null) {
-      final batchCommand = commands.join(';');
-      homeScreenState!.sendCommand(batchCommand);
-    } else if (commands.isEmpty) {
-      logger.i("No changes detected, no commands sent");
-    } else {
-      logger.w("SSID or Password is null or empty, commands not sent");
-    }
   }
 
   void saveDefaultSettings() {
@@ -186,7 +161,7 @@ class SetupScreenState extends State<SetupScreen> {
       int green = (sportEffectColor1.value >> 8) & 0xFF;
       int blue = (sportEffectColor1.value) & 0xFF;
       commands.add('SC1:$red,$green,$blue');
-      homeScreenState!.sendCommand('SC1:$red,$green,$blue');
+      bleProvider.sendCommand('SC1:$red,$green,$blue');
     }
 
     if (sportEffectColor2 != previousSportEffectColor2) {
@@ -194,14 +169,14 @@ class SetupScreenState extends State<SetupScreen> {
       int green = (sportEffectColor2.value >> 8) & 0xFF;
       int blue = (sportEffectColor2.value) & 0xFF;
       commands.add('SC2:$red,$green,$blue');
-      homeScreenState!.sendCommand('SC2:$red,$green,$blue');
+      bleProvider.sendCommand('SC2:$red,$green,$blue');
     }
     logger.i(
         "homeScreenState is ${homeScreenState != null ? 'not null' : 'null'}");
 
     if (commands.isNotEmpty && homeScreenState != null) {
       final batchCommand = '${commands.join(';')};';
-      homeScreenState!.sendCommand(batchCommand);
+      bleProvider.sendCommand(batchCommand);
       previousNameBoard1 = currentNameBoard1;
       previousNameBoard2 = currentNameBoard2;
       previousInitialBrightness = currentInitialBrightness;
@@ -221,7 +196,6 @@ class SetupScreenState extends State<SetupScreen> {
 
   void onBackButtonPressed() {
     Navigator.pop(context, {
-      'wifiEnabled': wifiEnabled,
       'lightsOn': lightsOn,
       'espNowEnabled': espNowEnabled,
     });
@@ -251,7 +225,7 @@ class SetupScreenState extends State<SetupScreen> {
 
     String command = '$colorName:$red,$green,$blue';
     if (homeScreenState != null) {
-      homeScreenState!.sendCommand(command);
+      bleProvider.sendCommand(command);
     }
   }
 
@@ -282,7 +256,7 @@ class SetupScreenState extends State<SetupScreen> {
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        homeScreenState!.sendCommand('SET_ROLE:SECONDARY;');
+        bleProvider.sendCommand('SET_ROLE:SECONDARY;');
         logger.i("Sent command to change roles on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");
@@ -318,7 +292,7 @@ class SetupScreenState extends State<SetupScreen> {
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        homeScreenState!.sendCommand('RESET_CONFIG;');
+        bleProvider.sendCommand('RESET_CONFIG;');
         logger.i("Sent command to reset configuration on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");
@@ -354,7 +328,7 @@ class SetupScreenState extends State<SetupScreen> {
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        homeScreenState!.sendCommand('CLEAR_ALL;');
+        bleProvider.sendCommand('CLEAR_ALL;');
         logger.i("Sent command to clear all saved variables on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");
@@ -364,6 +338,7 @@ class SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return isLoading
         ? const Center(child: CircularProgressIndicator())
         : WillPopScope(
@@ -380,7 +355,9 @@ class SetupScreenState extends State<SetupScreen> {
                     child: ListView(
                       children: [
                         const SizedBox(height: 20),
-                        isConnected ? buildControlScreen() : const HomeScreen(),
+                        context.watch<BLEProvider>().isConnected
+                            ? buildControlScreen()
+                            : bleProvider.buildDeviceList(),
                         const SizedBox(height: 20),
                         const StatusIndicators(),
                       ],
@@ -395,15 +372,6 @@ class SetupScreenState extends State<SetupScreen> {
   Widget buildControlScreen() {
     return Column(
       children: [
-        Section(
-          title: 'Wifi Settings',
-          content: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 10,
-            runSpacing: 10,
-            children: [buildWiFiSettingsContainer()],
-          ),
-        ),
         const SizedBox(height: 15),
         Section(
           title: 'Default Settings',
@@ -515,41 +483,6 @@ class SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  Widget buildWiFiSettingsContainer() {
-    return Container(
-      padding: const EdgeInsets.all(10.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          TextField(
-            controller: ssidController,
-            decoration: const InputDecoration(
-              labelText: "WiFi SSID",
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: passwordController,
-            decoration: const InputDecoration(
-              labelText: "WiFi Password",
-              border: OutlineInputBorder(),
-            ),
-            obscureText: true,
-          ),
-          const SizedBox(height: 20),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: ElevatedButton(
-              onPressed: saveWiFiSettings,
-              child: const Text("Save WiFi Settings"),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget buildDefaultSettingsContainer() {
     return Container(
       padding: const EdgeInsets.all(5.0),
@@ -588,6 +521,40 @@ class SetupScreenState extends State<SetupScreen> {
                 initialBrightness = value;
               });
             },
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: buildSliderInput(
+                  "Effects Size",
+                  blockSize,
+                  1,
+                  30,
+                  1,
+                  (value) {
+                    setState(() {
+                      blockSize = value;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: buildSliderInput(
+                  "Effects Speed",
+                  effectSpeed,
+                  1,
+                  50,
+                  1,
+                  (value) {
+                    setState(() {
+                      effectSpeed = value;
+                    });
+                  },
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Row(
