@@ -1,2 +1,4 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+
+// existing Flutter config settings
 #include "Generated.xcconfig"
