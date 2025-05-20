@@ -45,8 +45,6 @@ class _TabScreenState extends State<TabScreen> {
           sendCommand: bleProvider.sendCommand,
         ),
         SetupScreen(
-          ssid: ssid,
-          password: password,
           nameBoard1: nameBoard1,
           nameBoard2: nameBoard2,
           initialBrightness: initialBrightness,

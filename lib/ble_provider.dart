@@ -577,7 +577,7 @@ updateBoards(updatedBoards);
   }
 
   void requestCurrentSettings() {
-    sendCommand("GET_SETTINGS;");
+    sendCommand("CMD:SETTINGS;");
   }
 
   void toggleLights() {
@@ -595,11 +595,11 @@ updateBoards(updatedBoards);
   }
 
   void sendDeepSleep() {
-    sendCommand('toggleDeepSleep:SLEEP;');
+    sendCommand('CMD:SLEEP;');
   }
 
   void sendRestart() {
-    sendCommand('Restart;');
+    sendCommand('CMD:RESTART;');
   }
 
 // Setters for Board 1

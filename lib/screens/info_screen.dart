@@ -47,7 +47,7 @@ class InfoScreenState extends State<InfoScreen>
     // Delay execution to ensure BLE context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (bleProvider.isConnected) {
-        bleProvider.sendCommand('GET_INFO;');
+        bleProvider.sendCommand('CMD:INFO;');
       }
     });
   }
@@ -236,7 +236,7 @@ class InfoScreenState extends State<InfoScreen>
           content: buildConnectionInfoList(),
         ),
         ElevatedButton(
-          onPressed: () => bleProvider.sendCommand("GET_INFO;"),
+          onPressed: () => bleProvider.sendCommand("CMD:INFO;"),
           child: const Text("Refresh Info"),
         ),
         const SizedBox(height: 15),

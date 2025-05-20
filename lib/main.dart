@@ -46,8 +46,6 @@ class MyApp extends StatelessWidget {
         final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
           builder: (context) => SetupScreen(
-            ssid: args['ssid'],
-            password: args['password'],
             nameBoard1: args['nameBoard1'],
             nameBoard2: args['nameBoard2'],
             initialBrightness: args['initialBrightness'],

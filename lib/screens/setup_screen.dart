@@ -13,8 +13,6 @@ import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
 
 class SetupScreen extends StatefulWidget {
-  final String ssid;
-  final String password;
   final String nameBoard1;
   final String nameBoard2;
   final double initialBrightness;
@@ -29,8 +27,6 @@ class SetupScreen extends StatefulWidget {
 
   const SetupScreen({
     super.key,
-    required this.ssid,
-    required this.password,
     required this.nameBoard1,
     required this.nameBoard2,
     required this.initialBrightness,
@@ -100,7 +96,7 @@ class SetupScreenState extends State<SetupScreen>
       setState(() {
         isLoading = true; // Show loading indicator
       });
-      widget.sendCommand('GET_SETTINGS;');
+      widget.sendCommand('CMD:SETTINGS;');
     }
   }
 
@@ -109,7 +105,7 @@ class SetupScreenState extends State<SetupScreen>
       isLoading = true;
     });
 
-    await widget.sendCommand('GET_SETTINGS;');
+    await widget.sendCommand('CMD:SETTINGS;');
     setupComplete = true; // Set this flag to true after sending GET_SETTINGS
 
     setState(() {
@@ -292,7 +288,7 @@ class SetupScreenState extends State<SetupScreen>
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        bleProvider.sendCommand('RESET_CONFIG;');
+        bleProvider.sendCommand('CMD:RESET;');
         logger.i("Sent command to reset configuration on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");
@@ -328,7 +324,7 @@ class SetupScreenState extends State<SetupScreen>
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        bleProvider.sendCommand('CLEAR_ALL;');
+        bleProvider.sendCommand('CMD:CLEAR_ALL;');
         logger.i("Sent command to clear all saved variables on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");

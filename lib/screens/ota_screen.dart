@@ -19,6 +19,7 @@ class OTAScreen extends StatefulWidget {
 class OTAScreenState extends State<OTAScreen>
     with AutomaticKeepAliveClientMixin {
   final Logger logger = Logger();
+  bool _isChecking = false;
   bool _isUpdating = false;
   List<String> logs = [];
   BLEProvider get bleProvider =>
@@ -44,7 +45,15 @@ class OTAScreenState extends State<OTAScreen>
       _isUpdating = true;
       logs.clear();
     });
-    bleProvider.sendCommand("OTA:START;");
+    bleProvider.sendCommand("CMD:OTA_START;");
+  }
+
+  void checkForUpdate() {
+    setState(() {
+      _isChecking = true;
+      logs.clear();
+    });
+    // Checks the internet for an update for the boards;
   }
 
   void handleOtaStatusUpdate(String status) {
@@ -94,8 +103,13 @@ class OTAScreenState extends State<OTAScreen>
             children: [
               const SizedBox(height: 10),
               ElevatedButton(
+                onPressed: _isChecking ? null : checkForUpdate,
+                child: const Text("Check for Update"),
+              ),
+              const SizedBox(height: 10),
+              ElevatedButton(
                 onPressed: _isUpdating ? null : startOtaProcess,
-                child: const Text("Start OTA Update"),
+                child: const Text("Start Board Update"),
               ),
               const SizedBox(height: 10),
               const Divider(thickness: 1.5),
