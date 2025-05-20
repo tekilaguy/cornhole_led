@@ -7,13 +7,13 @@ import 'package:provider/provider.dart';
 import '/global.dart';
 import '/ble_provider.dart';
 
-
 import '/widgets/background.dart';
 import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
 
 Future<Map<String, dynamic>> fetchUpdate() async {
-  final response = await http.get(Uri.parse('https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates/cornhole_board_version.json'));
+  final response = await http.get(Uri.parse(
+      'https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates/cornhole_board_version.json'));
   if (response.statusCode == 200) {
     return json.decode(response.body);
   } else {
@@ -46,8 +46,8 @@ class OTAScreen extends StatefulWidget {
 
 class OTAScreenState extends State<OTAScreen>
     with AutomaticKeepAliveClientMixin {
- late Future<Map<String, dynamic>> _updateFuture;
-   final Logger logger = Logger();
+  late Future<Map<String, dynamic>> _updateFuture;
+  final Logger logger = Logger();
   bool _isChecking = false;
   bool _isUpdating = false;
   List<String> logs = [];
@@ -61,6 +61,7 @@ class OTAScreenState extends State<OTAScreen>
   void initState() {
     super.initState();
     otaScreenState = this;
+    _updateFuture = fetchUpdate();
   }
 
   void logMessage(String message) {
@@ -81,8 +82,21 @@ class OTAScreenState extends State<OTAScreen>
     setState(() {
       _isChecking = true;
       logs.clear();
+      _updateFuture = fetchUpdate();
     });
-    // Checks the internet for an update for the boards;
+
+    _updateFuture.then((jsonData) {
+      final update = Update.fromJson(jsonData);
+      logMessage("✅ Version: ${update.version}");
+      logMessage("🧩 File: ${update.bin}");
+      logMessage("🌐 URL: ${update.url}");
+    }).catchError((error) {
+      logMessage("❌ Error checking update: $error");
+    }).whenComplete(() {
+      setState(() {
+        _isChecking = false;
+      });
+    });
   }
 
   void handleOtaStatusUpdate(String status) {
