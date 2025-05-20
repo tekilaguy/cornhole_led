@@ -1,13 +1,41 @@
 // ota_screen.dart
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
 import '/global.dart';
 import '/ble_provider.dart';
 
+
 import '/widgets/background.dart';
 import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
+
+Future<Map<String, dynamic>> fetchUpdate() async {
+  final response = await http.get(Uri.parse('https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates/cornhole_board_version.json'));
+  if (response.statusCode == 200) {
+    return json.decode(response.body);
+  } else {
+    throw Exception('Failed to load update');
+  }
+}
+
+class Update {
+  final String url;
+  final String bin;
+  final String version;
+
+  const Update({required this.url, required this.bin, required this.version});
+
+  factory Update.fromJson(Map<String, dynamic> json) {
+    return Update(
+      url: json['file_url'] ?? '',
+      bin: json['bin'] ?? '',
+      version: json['version'] ?? '',
+    );
+  }
+}
 
 class OTAScreen extends StatefulWidget {
   const OTAScreen({super.key});
@@ -18,7 +46,8 @@ class OTAScreen extends StatefulWidget {
 
 class OTAScreenState extends State<OTAScreen>
     with AutomaticKeepAliveClientMixin {
-  final Logger logger = Logger();
+ late Future<Map<String, dynamic>> _updateFuture;
+   final Logger logger = Logger();
   bool _isChecking = false;
   bool _isUpdating = false;
   List<String> logs = [];
