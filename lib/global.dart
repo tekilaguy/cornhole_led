@@ -74,6 +74,7 @@ SetupScreenState? setupScreenState;
 OTAScreenState? otaScreenState;
 InfoScreenState? infoScreenState;
 
+
 const String getSettingsCommand = "GET_SETTINGS;";
 const String toggleWiFiCommand = "toggleWiFi:";
 

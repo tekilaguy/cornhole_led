@@ -375,7 +375,7 @@ void handleNotification(String value) {
       if (match == null) continue;
 
       final key = match.group(1)!;
-      final index = match.group(2)!;
+      //final index = match.group(2)!;
 
       // Normalize MAC and use as unique key
       if (key == 'm') {
