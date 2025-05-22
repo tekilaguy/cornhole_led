@@ -8,9 +8,10 @@ import 'package:provider/provider.dart';
 
 import '../ble_provider.dart';
 import 'home_screen.dart';
-import 'info_screen.dart';
+import 'test_screen_old.dart';
 import 'setup_screen.dart';
 import 'ota_screen.dart';
+import 'info_screen.dart';
 import '/widgets/background.dart';
 import '/global.dart';
 
@@ -34,16 +35,8 @@ class _TabScreenState extends State<TabScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _screens = [
-
         const HomeScreen(),
-        const OTAScreen(),
-        InfoScreen(
-          lightsOn: lightsOn,
-          espNowEnabled: espNowEnabled,
-          isConnected: isConnected,
-          connectionInfo: connectionInfo,
-          sendCommand: bleProvider.sendCommand,
-        ),
+        const InfoScreen(),        const OTAScreen(),
         SetupScreen(
           nameBoard1: nameBoard1,
           nameBoard2: nameBoard2,
@@ -57,6 +50,14 @@ class _TabScreenState extends State<TabScreen> {
           initialStartupColor: initialStartupColor,
           sendCommand: bleProvider.sendCommand,
         ),
+        TestScreen(
+          lightsOn: lightsOn,
+          espNowEnabled: espNowEnabled,
+          isConnected: isConnected,
+          connectionInfo: connectionInfo,
+          sendCommand: bleProvider.sendCommand,
+        ),
+
       ];
       setState(() {});
     });
@@ -131,9 +132,10 @@ class _TabScreenState extends State<TabScreen> {
             animationDuration: const Duration(milliseconds: 300),
             items: const <Widget>[
               Icon(Icons.home, size: 30, color: Colors.white),
-              Icon(Icons.update, size: 30, color: Colors.white),
               Icon(Icons.info, size: 30, color: Colors.white),
+              Icon(Icons.update, size: 30, color: Colors.white),
               Icon(Icons.settings, size: 30, color: Colors.white),
+              Icon(Icons.thermostat, size: 30, color: Colors.white),
             ],
             onTap: (index) {
               setState(() {

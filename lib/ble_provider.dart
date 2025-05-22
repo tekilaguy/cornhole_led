@@ -38,11 +38,14 @@ class BLEProvider with ChangeNotifier {
   int _negotiatedMtu = 512; // default BLE MTU
   int get negotiatedMtu => _negotiatedMtu;
 
+  String normalizeMac(String mac) {
+    return mac.replaceAll(":", "-").toLowerCase();
+  }
+
   // Board 1
   String _boardRole1 = '';
   String _nameBoard1 = '';
   String _macAddrBoard1 = '';
-  String _ipAddrBoard1 = '';
   int _batteryVoltageBoard1 = 0;
   int _batteryLevelBoard1 = 0;
 
@@ -50,7 +53,6 @@ class BLEProvider with ChangeNotifier {
   String _boardRole2 = '';
   String _nameBoard2 = '';
   String _macAddrBoard2 = '';
-  String _ipAddrBoard2 = '';
   int _batteryVoltageBoard2 = 0;
   int _batteryLevelBoard2 = 0;
 
@@ -62,14 +64,12 @@ class BLEProvider with ChangeNotifier {
   String get boardRole1 => _boardRole1;
   String get nameBoard1 => _nameBoard1;
   String get macAddrBoard1 => _macAddrBoard1;
-  String get ipAddrBoard1 => _ipAddrBoard1;
   int get batteryVoltageBoard1 => _batteryVoltageBoard1;
   int get batteryLevelBoard1 => _batteryLevelBoard1;
 
   String get boardRole2 => _boardRole2;
   String get nameBoard2 => _nameBoard2;
   String get macAddrBoard2 => _macAddrBoard2;
-  String get ipAddrBoard2 => _ipAddrBoard2;
   int get batteryVoltageBoard2 => _batteryVoltageBoard2;
   int get batteryLevelBoard2 => _batteryLevelBoard2;
 
@@ -310,104 +310,119 @@ class BLEProvider with ChangeNotifier {
     }
   }
 
-  void onValueReceived(List<int> value) async {
+  String accumulatedNotification = ''; // Add at class level
+
+  void onValueReceived(List<int> value) {
     String data = utf8.decode(value);
     logger.i("Received partial data: $data");
     receivedMessage += data;
 
     while (receivedMessage.contains(";")) {
       final endIndex = receivedMessage.indexOf(";");
-      final completeMessage = receivedMessage.substring(0, endIndex);
+      final completeField = receivedMessage.substring(0, endIndex);
       receivedMessage = receivedMessage.substring(endIndex + 1);
-      handleNotification(completeMessage);
+
+      // Accumulate into notification string
+      accumulatedNotification += "$completeField;";
+
+      // If we see version field, treat this as the last field of a board info block
+      if (completeField.contains(RegExp(r"^ver\d+:"))) {
+        logger.i("🧩 Reassembled board message: $accumulatedNotification");
+        handleNotification(accumulatedNotification);
+        accumulatedNotification = ''; // reset for next board
+      }
     }
   }
 
-  void handleNotification(String value) {
-    logger.i("Received notification: $value");
+void handleNotification(String value) {
+  logger.i("Received notification: $value");
 
-    try {
-      // Fast path: Color/Effect messages
-      if (value.startsWith("ColorIndex:")) {
-        String indexStr = value.substring("ColorIndex:".length).trim();
-        int? colorIndex = int.tryParse(indexStr);
-        if (colorIndex != null) {
-          activeColorIndex = colorIndex;
-          logger.i("Color index updated to: $colorIndex");
-        }
-        return;
-      } else if (value.startsWith("Effect:")) {
-        String effect = value.substring("Effect:".length).trim();
-        activeEffect = effect;
-        logger.i("Effect updated to: $effect");
-        return;
+  try {
+    if (value.startsWith("ColorIndex:")) {
+      final colorIndex = int.tryParse(value.substring("ColorIndex:".length).trim());
+      if (colorIndex != null) {
+        activeColorIndex = colorIndex;
+        logger.i("🎨 Color index updated to: $colorIndex");
       }
-
-      // Legacy settings response
-      if (value.startsWith("S:")) {
-        handleSettingsResponse(value.substring(2));
-        return;
-      }
-
-      // New structured board info format: r1:...;n1:...;...
-      final Map<int, Map<String, String>> boardData = {};
-      final fields = value.split(';');
-
-      for (String field in fields) {
-        if (field.isEmpty || !field.contains(':')) continue;
-
-        final parts = field.split(':');
-        if (parts.length != 2) continue;
-
-        final tag = parts[0];
-        final val = parts[1];
-
-        final match = RegExp(r'^([a-zA-Z]+)(\d+)$').firstMatch(tag);
-        if (match == null) continue;
-
-        final key = match.group(1)!; // e.g., 'r', 'n', 'i', etc.
-        final index = int.tryParse(match.group(2)!);
-        if (index == null) continue;
-
-        boardData.putIfAbsent(index, () => {});
-        boardData[index]![key] = val;
-      }
-
-      final updatedBoards = [..._boards];
-
-      for (final entry in boardData.entries) {
-        final index = entry.key;
-        final data = entry.value;
-
-        final newInfo = BoardInfo(
-          role: data['r'] ?? '',
-          name: data['n'] ?? 'Board $index',
-          mac: data['m'] ?? '',
-          batteryLevel: int.tryParse(data['l'] ?? '') ?? 0,
-          batteryVoltage: int.tryParse(data['v'] ?? '') ?? 0,
-          version: data['ver'] ?? '',
-        );
-
-        final existingIndex = updatedBoards
-            .indexWhere((b) => b.mac == newInfo.mac && newInfo.mac.isNotEmpty);
-
-        if (existingIndex != -1) {
-          // Update existing board
-          updatedBoards[existingIndex] = newInfo;
-        } else {
-          // Add new board
-          updatedBoards.add(newInfo);
-        }
-      }
-
-updateBoards(updatedBoards);
-
-    } catch (e) {
-      logger.e("Error handling notification: $e");
-      connectionInfo = "Error parsing notification";
-      notifyListeners();
+      return;
     }
+
+    if (value.startsWith("Effect:")) {
+      activeEffect = value.substring("Effect:".length).trim();
+      logger.i("🌈 Effect updated to: $activeEffect");
+      return;
+    }
+
+    if (value.startsWith("S:")) {
+      handleSettingsResponse(value.substring(2));
+      return;
+    }
+
+    final Map<String, Map<String, String>> boardData = {};
+    String? macKey;
+    final fields = value.split(';');
+
+    for (final field in fields) {
+      if (field.isEmpty || !field.contains(':')) continue;
+
+      final parts = field.split(':');
+      if (parts.length != 2) continue;
+
+      final tag = parts[0];
+      final val = parts[1];
+
+      final match = RegExp(r'^(r|n|m|l|v|ver)(\d+)$').firstMatch(tag);
+      if (match == null) continue;
+
+      final key = match.group(1)!;
+      final index = match.group(2)!;
+
+      // Normalize MAC and use as unique key
+      if (key == 'm') {
+        macKey = normalizeMac(val);
+      }
+
+      if (macKey != null) {
+        boardData.putIfAbsent(macKey, () => {});
+        boardData[macKey]![key] = val;
+      }
+    }
+
+    final List<BoardInfo> updatedBoards = [];
+
+    for (final entry in boardData.entries) {
+      final mac = entry.key;
+      final data = entry.value;
+
+      logger.i("✅ Parsed board $mac => $data");
+
+      final newInfo = BoardInfo(
+        role: data['r'] ?? '',
+        name: data['n'] ?? '',
+        mac: mac,
+        batteryLevel: int.tryParse(data['l'] ?? '') ?? 0,
+        batteryVoltage: int.tryParse(data['v'] ?? '') ?? 0,
+        version: data['ver'] ?? '',
+      );
+
+      if (newInfo.mac.isEmpty) {
+        logger.w("⚠️ Skipping board due to missing MAC");
+        continue;
+      }
+
+      updatedBoards.add(newInfo);
+    }
+
+    if (updatedBoards.isNotEmpty) {
+      updateBoards(updatedBoards);
+    }
+
+  } catch (e) {
+    logger.e("❌ Error handling notification: $e");
+    connectionInfo = "Error parsing notification";
+    notifyListeners();
   }
+}
 
   Widget buildDeviceList() {
     return Column(
@@ -618,11 +633,6 @@ updateBoards(updatedBoards);
     notifyListeners();
   }
 
-  void setIpAddrBoard1(String value) {
-    _ipAddrBoard1 = value;
-    notifyListeners();
-  }
-
   void setBatteryVoltageBoard1(int value) {
     _batteryVoltageBoard1 = value;
     notifyListeners();
@@ -646,11 +656,6 @@ updateBoards(updatedBoards);
 
   void setMacAddrBoard2(String value) {
     _macAddrBoard2 = value;
-    notifyListeners();
-  }
-
-  void setIpAddrBoard2(String value) {
-    _ipAddrBoard2 = value;
     notifyListeners();
   }
 

@@ -50,6 +50,8 @@ class OTAScreenState extends State<OTAScreen>
   final Logger logger = Logger();
   bool _isChecking = false;
   bool _isUpdating = false;
+  bool _updateAvailable = false;
+
   List<String> logs = [];
   BLEProvider get bleProvider =>
       Provider.of<BLEProvider>(context, listen: false);
@@ -82,14 +84,41 @@ class OTAScreenState extends State<OTAScreen>
     setState(() {
       _isChecking = true;
       logs.clear();
+      _updateAvailable = false;
       _updateFuture = fetchUpdate();
     });
 
     _updateFuture.then((jsonData) {
       final update = Update.fromJson(jsonData);
-      logMessage("✅ Version: ${update.version}");
+
+      logMessage("✅ Latest Version: ${update.version}");
       logMessage("🧩 File: ${update.bin}");
       logMessage("🌐 URL: ${update.url}");
+
+      final boards = bleProvider.boards;
+
+      if (boards.isEmpty) {
+        logMessage("⚠️ No boards connected.");
+      } else {
+        bool anyOutdated = false;
+        for (final board in boards) {
+          if (board.version != update.version) {
+            logMessage(
+                "⬆️ ${board.name} (${board.role}) has version ${board.version}. Update available.");
+            anyOutdated = true;
+          } else {
+            logMessage(
+                "✅ ${board.name} (${board.role}) is already up to date.");
+          }
+        }
+
+        setState(() {
+          _updateAvailable = anyOutdated;
+        });
+        if (!anyOutdated) {
+          logMessage("🟢 All boards are already up to date.");
+        }
+      }
     }).catchError((error) {
       logMessage("❌ Error checking update: $error");
     }).whenComplete(() {
@@ -150,10 +179,6 @@ class OTAScreenState extends State<OTAScreen>
                 child: const Text("Check for Update"),
               ),
               const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: _isUpdating ? null : startOtaProcess,
-                child: const Text("Start Board Update"),
-              ),
               const SizedBox(height: 10),
               const Divider(thickness: 1.5),
               const Padding(
@@ -180,6 +205,12 @@ class OTAScreenState extends State<OTAScreen>
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 10),
+              ElevatedButton(
+                onPressed:
+                    (_isUpdating || !_updateAvailable) ? null : startOtaProcess,
+                child: const Text("Start Board Update"),
               ),
             ],
           ),

@@ -6,6 +6,9 @@ import 'screens/info_screen.dart';
 import 'screens/setup_screen.dart';
 import 'screens/ota_screen.dart';
 
+// Application Version
+String appVersion = "1.0.9";
+
 // Logger instance
 Logger logger = Logger();
 

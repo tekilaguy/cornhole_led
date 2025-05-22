@@ -324,7 +324,7 @@ class SetupScreenState extends State<SetupScreen>
 
     if (confirmed == true) {
       if (homeScreenState != null) {
-        bleProvider.sendCommand('CMD:CLEAR_ALL;');
+        bleProvider.sendCommand('CMD:CLEAR;');
         logger.i("Sent command to clear all saved variables on both boards.");
       } else {
         logger.e("HomeScreenState is null, cannot send commands");

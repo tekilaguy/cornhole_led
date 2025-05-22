@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/tab_screen.dart';
 //import 'screens/home_screen.dart';
-import 'screens/info_screen.dart';
+import 'screens/test_screen_old.dart';
 import 'screens/setup_screen.dart';
 import 'screens/ota_screen.dart';
 import 'ble_provider.dart';
@@ -33,7 +33,7 @@ class MyApp extends StatelessWidget {
       case '/info':
         final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
-          builder: (context) => InfoScreen(
+          builder: (context) => TestScreen(
             lightsOn: args['lightsOn'],
             espNowEnabled: args['espNowEnabled'],
             isConnected: args['isConnected'],
