@@ -334,102 +334,103 @@ class BLEProvider with ChangeNotifier {
     }
   }
 
-void handleNotification(String value) {
-  logger.i("Received notification: $value");
+  void handleNotification(String value) {
+    logger.i("Received notification: $value");
 
-  try {
-    if (value.startsWith("ColorIndex:")) {
-      final colorIndex = int.tryParse(value.substring("ColorIndex:".length).trim());
-      if (colorIndex != null) {
-        activeColorIndex = colorIndex;
-        logger.i("🎨 Color index updated to: $colorIndex");
-      }
-      return;
-    }
-
-    if (value.startsWith("Effect:")) {
-      activeEffect = value.substring("Effect:".length).trim();
-      logger.i("🌈 Effect updated to: $activeEffect");
-      return;
-    }
-
-    if (value.startsWith("S:")) {
-      handleSettingsResponse(value.substring(2));
-      return;
-    }
-
-    final Map<String, Map<String, String>> boardData = {};
-    String? macKey;
-    final fields = value.split(';');
-
-    for (final field in fields) {
-      if (field.isEmpty || !field.contains(':')) continue;
-
-      final parts = field.split(':');
-      if (parts.length != 2) continue;
-
-      final tag = parts[0];
-      final val = parts[1];
-
-      final match = RegExp(r'^(r|n|m|l|v|ver)(\d+)$').firstMatch(tag);
-      if (match == null) continue;
-
-      final key = match.group(1)!;
-      //final index = match.group(2)!;
-
-      // Normalize MAC and use as unique key
-      if (key == 'm') {
-        macKey = normalizeMac(val);
+    try {
+      if (value.startsWith("ColorIndex:")) {
+        final colorIndex =
+            int.tryParse(value.substring("ColorIndex:".length).trim());
+        if (colorIndex != null) {
+          activeColorIndex = colorIndex;
+          logger.i("🎨 Color index updated to: $colorIndex");
+        }
+        return;
       }
 
-      if (macKey != null) {
-        boardData.putIfAbsent(macKey, () => {});
-        boardData[macKey]![key] = val;
-      }
-    }
-
-    final List<BoardInfo> updatedBoards = [];
-
-    for (final entry in boardData.entries) {
-      final mac = entry.key;
-      final data = entry.value;
-
-      logger.i("✅ Parsed board $mac => $data");
-
-      final newInfo = BoardInfo(
-        role: data['r'] ?? '',
-        name: data['n'] ?? '',
-        mac: mac,
-        batteryLevel: int.tryParse(data['l'] ?? '') ?? 0,
-        batteryVoltage: int.tryParse(data['v'] ?? '') ?? 0,
-        version: data['ver'] ?? '',
-      );
-
-      if (newInfo.mac.isEmpty) {
-        logger.w("⚠️ Skipping board due to missing MAC");
-        continue;
+      if (value.startsWith("Effect:")) {
+        activeEffect = value.substring("Effect:".length).trim();
+        logger.i("🌈 Effect updated to: $activeEffect");
+        return;
       }
 
-      updatedBoards.add(newInfo);
-    }
+      if (value.startsWith("S:")) {
+        handleSettingsResponse(value.substring(2));
+        return;
+      }
 
-    if (updatedBoards.isNotEmpty) {
-      updateBoards(updatedBoards);
-    }
+      final Map<String, Map<String, String>> boardData = {};
+      String? macKey;
+      final fields = value.split(';');
 
-  } catch (e) {
-    logger.e("❌ Error handling notification: $e");
-    connectionInfo = "Error parsing notification";
-    notifyListeners();
+      for (final field in fields) {
+        if (field.isEmpty || !field.contains(':')) continue;
+
+        final parts = field.split(':');
+        if (parts.length != 2) continue;
+
+        final tag = parts[0];
+        final val = parts[1];
+
+        final match = RegExp(r'^(r|n|m|l|v|ver)(\d+)$').firstMatch(tag);
+        if (match == null) continue;
+
+        final key = match.group(1)!;
+        //final index = match.group(2)!;
+
+        // Normalize MAC and use as unique key
+        if (key == 'm') {
+          macKey = normalizeMac(val);
+        }
+
+        if (macKey != null) {
+          boardData.putIfAbsent(macKey, () => {});
+          boardData[macKey]![key] = val;
+        }
+      }
+
+      final List<BoardInfo> updatedBoards = [];
+
+      for (final entry in boardData.entries) {
+        final mac = entry.key;
+        final data = entry.value;
+
+        logger.i("✅ Parsed board $mac => $data");
+
+        final newInfo = BoardInfo(
+          role: data['r'] ?? '',
+          name: data['n'] ?? '',
+          mac: mac,
+          batteryLevel: int.tryParse(data['l'] ?? '') ?? 0,
+          batteryVoltage: int.tryParse(data['v'] ?? '') ?? 0,
+          version: data['ver'] ?? '',
+        );
+
+        if (newInfo.mac.isEmpty) {
+          logger.w("⚠️ Skipping board due to missing MAC");
+          continue;
+        }
+
+        updatedBoards.add(newInfo);
+      }
+
+      if (updatedBoards.isNotEmpty) {
+        updateBoards(updatedBoards);
+      }
+    } catch (e) {
+      logger.e("❌ Error handling notification: $e");
+      connectionInfo = "Error parsing notification";
+      notifyListeners();
+    }
   }
-}
 
   Widget buildDeviceList() {
     return Column(
       children: [
         const SizedBox(height: 10),
         ElevatedButton(
-          onPressed: scanForDevices,
+          onPressed: () => scanForDevices(rescan: true), // ← force rescan
+
           style: ElevatedButton.styleFrom(
             foregroundColor: Colors.white,
             backgroundColor: Colors.blue,
