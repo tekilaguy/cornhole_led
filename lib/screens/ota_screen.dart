@@ -12,6 +12,9 @@ import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
 
 Future<Map<String, dynamic>> fetchUpdate() async {
+var data;
+final version = data['version'] ?? '';
+latestFirmwareVersion = version;
   final response = await http.get(Uri.parse(
       'https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates/cornhole_board_version.json'));
   if (response.statusCode == 200) {
@@ -63,7 +66,7 @@ class OTAScreenState extends State<OTAScreen>
   void initState() {
     super.initState();
     otaScreenState = this;
-    _updateFuture = fetchUpdate();
+       _updateFuture = fetchUpdate();
   }
 
   void logMessage(String message) {

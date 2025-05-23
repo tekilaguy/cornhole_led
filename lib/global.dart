@@ -33,17 +33,13 @@ int brightness = 50;
 
 // Variables for Board 1
 String boardRole1 = 'PRIMARY';
-String nameBoard1 = '';
 String macAddrBoard1 = '';
-String ipAddrBoard1 = '';
 int batteryVoltageBoard1 = 0;
 int batteryLevelBoard1 = 0;
 
 // Variables for Board 2
 String boardRole2 = 'SECONDARY';
-String nameBoard2 = '';
 String macAddrBoard2 = '';
-String ipAddrBoard2 = '';
 int batteryVoltageBoard2 = 0;
 int batteryLevelBoard2 = 0;
 
@@ -60,6 +56,7 @@ double blockSize = 15;
 double effectSpeed = 25;
 double celebrationDuration = 4000;
 double inactivityTimeout = 10;
+double deepSleepTimeout = 10;
 
 // Color settings
 Color initialStartupColor = Colors.blue;
@@ -74,9 +71,10 @@ SetupScreenState? setupScreenState;
 OTAScreenState? otaScreenState;
 InfoScreenState? infoScreenState;
 
+String latestFirmwareVersion = '';
 
-const String getSettingsCommand = "GET_SETTINGS;";
-const String toggleWiFiCommand = "toggleWiFi:";
+//const String getSettingsCommand = "GET_SETTINGS;";
+//const String toggleWiFiCommand = "toggleWiFi:";
 
 //OTA Variables
 String url = "http://cornhole-updates.web.app";

@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 
 import '../ble_provider.dart';
 import 'home_screen.dart';
-import 'test_screen_old.dart';
 import 'setup_screen.dart';
 import 'ota_screen.dart';
 import 'info_screen.dart';
@@ -36,28 +35,20 @@ class _TabScreenState extends State<TabScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _screens = [
         const HomeScreen(),
-        const InfoScreen(),        const OTAScreen(),
+        const InfoScreen(),
+        const OTAScreen(),
         SetupScreen(
-          nameBoard1: nameBoard1,
-          nameBoard2: nameBoard2,
           initialBrightness: initialBrightness,
           effectSpeed: effectSpeed,
           blockSize: blockSize,
           celebrationDuration: celebrationDuration,
           inactivityTimeout: inactivityTimeout,
+          deepSleepTimeout: deepSleepTimeout,
           sportEffectColor1: sportEffectColor1,
           sportEffectColor2: sportEffectColor2,
           initialStartupColor: initialStartupColor,
           sendCommand: bleProvider.sendCommand,
         ),
-        TestScreen(
-          lightsOn: lightsOn,
-          espNowEnabled: espNowEnabled,
-          isConnected: isConnected,
-          connectionInfo: connectionInfo,
-          sendCommand: bleProvider.sendCommand,
-        ),
-
       ];
       setState(() {});
     });
@@ -135,7 +126,6 @@ class _TabScreenState extends State<TabScreen> {
               Icon(Icons.info, size: 30, color: Colors.white),
               Icon(Icons.update, size: 30, color: Colors.white),
               Icon(Icons.settings, size: 30, color: Colors.white),
-              Icon(Icons.thermostat, size: 30, color: Colors.white),
             ],
             onTap: (index) {
               setState(() {

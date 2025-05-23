@@ -4,6 +4,7 @@ import '../ble_provider.dart';
 import '../widgets/background.dart';
 import '../widgets/section.dart';
 import '../widgets/status_indicators.dart';
+import '../global.dart';
 
 class InfoScreen extends StatefulWidget {
   const InfoScreen({super.key});
@@ -55,37 +56,53 @@ class InfoScreenState extends State<InfoScreen>
                 Expanded(
                   child: boards.isEmpty
                       ? const Center(
-                          child: Text("No boards connected",
-                              style: TextStyle(color: Colors.white)))
+                          child: Text(
+                            "No boards connected",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        )
                       : ListView.builder(
                           itemCount: boards.length,
                           itemBuilder: (context, index) {
                             final board = boards[index];
-                            return Section(
-                              title: board.role,
-                              content: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(board.name),
-                                      batteryIcon(board.batteryLevel),
-                                      const SizedBox(width: 12),
-                                      Text('Version: ${board.version}',
-                                          style: const TextStyle(
-                                              color: Colors.white)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  ListTile(
-                                    title: Text(
+                            final isOutdated =
+                                board.version != latestFirmwareVersion;
+
+                            return GestureDetector(
+                              onTap: () {
+                                bleProvider
+                                    .sendCommand("CMD:IDENTIFY:${board.mac};");
+                              },
+                              child: Section(
+                                title: board.role,
+                                content: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Text(
                                       "MAC: ${board.mac}",
                                       style:
                                           const TextStyle(color: Colors.white),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                ],
+                                    batteryIcon(board.batteryLevel),
+                                    Text(
+                                      "Firmware: ${board.version}",
+                                      style: const TextStyle(
+                                          color: Colors.white70),
+                                    ),
+                                    if (isOutdated)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          "⚠️ Upgrade Available",
+                                          style: const TextStyle(
+                                            color: Colors.amber,
+                                            fontWeight: FontWeight.bold,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -123,6 +140,7 @@ class InfoScreenState extends State<InfoScreen>
 
     return Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(icon, color: color, size: 18),
         const SizedBox(width: 4),

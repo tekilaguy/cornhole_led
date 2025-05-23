@@ -13,13 +13,12 @@ import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
 
 class SetupScreen extends StatefulWidget {
-  final String nameBoard1;
-  final String nameBoard2;
   final double initialBrightness;
   final double effectSpeed;
   final double blockSize;
   final double celebrationDuration;
   final double inactivityTimeout;
+  final double deepSleepTimeout;
   final Color sportEffectColor1;
   final Color sportEffectColor2;
   final Color initialStartupColor;
@@ -27,13 +26,12 @@ class SetupScreen extends StatefulWidget {
 
   const SetupScreen({
     super.key,
-    required this.nameBoard1,
-    required this.nameBoard2,
     required this.initialBrightness,
     required this.effectSpeed,
     required this.blockSize,
     required this.celebrationDuration,
     required this.inactivityTimeout,
+    required this.deepSleepTimeout,
     required this.sportEffectColor1,
     required this.sportEffectColor2,
     required this.initialStartupColor,
@@ -50,18 +48,15 @@ class SetupScreenState extends State<SetupScreen>
   BLEProvider get bleProvider =>
       Provider.of<BLEProvider>(context, listen: false);
 
-  late TextEditingController boardName1Controller;
-  late TextEditingController boardName2Controller;
   bool setupComplete = false;
 
 // Previous settings for comparison
-  String? previousNameBoard1;
-  String? previousNameBoard2;
   double? previousInitialBrightness;
   double? previousBlockSize;
   double? previousEffectSpeed;
   double? previousCelebrationDuration;
   double? previousInactivityTimeout;
+  double? previousDeepSleepTimeout;
   Color? previousInitialStartupColor;
   Color? previousSportEffectColor1;
   Color? previousSportEffectColor2;
@@ -79,19 +74,17 @@ class SetupScreenState extends State<SetupScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!setupComplete) {
-      previousNameBoard1 = widget.nameBoard1;
-      previousNameBoard2 = widget.nameBoard2;
+
       previousInitialBrightness = widget.initialBrightness;
       previousBlockSize = widget.blockSize;
       previousEffectSpeed = widget.effectSpeed;
       previousCelebrationDuration = widget.celebrationDuration;
       previousInactivityTimeout = widget.inactivityTimeout;
+      previousDeepSleepTimeout = widget.deepSleepTimeout;
       previousSportEffectColor1 = widget.sportEffectColor1;
       previousSportEffectColor2 = widget.sportEffectColor2;
       previousInitialStartupColor = widget.initialStartupColor;
 
-      boardName1Controller = TextEditingController(text: previousNameBoard1);
-      boardName2Controller = TextEditingController(text: previousNameBoard2);
 
       setState(() {
         isLoading = true; // Show loading indicator
@@ -116,20 +109,14 @@ class SetupScreenState extends State<SetupScreen>
   void saveDefaultSettings() {
     final List<String> commands = [];
 
-    final currentNameBoard1 = boardName1Controller.text;
-    final currentNameBoard2 = boardName2Controller.text;
     final currentInitialBrightness = initialBrightness;
     final currentBlockSize = blockSize;
     final currentEffectSpeed = effectSpeed;
     final currentCelebrationDuration = celebrationDuration;
     final currentInactivityTimeout = inactivityTimeout;
+    final currentDeepSleepTimeout = deepSleepTimeout;
 
-    if (currentNameBoard1 != previousNameBoard1) {
-      commands.add('B1:$currentNameBoard1');
-    }
-    if (currentNameBoard2 != previousNameBoard2) {
-      commands.add('B2:$currentNameBoard2');
-    }
+
     if (currentInitialBrightness != previousInitialBrightness) {
       commands.add('BRIGHT:$currentInitialBrightness');
     }
@@ -144,6 +131,9 @@ class SetupScreenState extends State<SetupScreen>
     }
     if (currentInactivityTimeout != previousInactivityTimeout) {
       commands.add('TIMEOUT:$currentInactivityTimeout');
+    }
+    if (currentDeepSleepTimeout != previousDeepSleepTimeout) {
+      commands.add('TIMEOUT:$currentDeepSleepTimeout');
     }
     if (initialStartupColor != previousInitialStartupColor) {
       int red = (initialStartupColor.value >> 16) & 0xFF;
@@ -173,13 +163,12 @@ class SetupScreenState extends State<SetupScreen>
     if (commands.isNotEmpty && homeScreenState != null) {
       final batchCommand = '${commands.join(';')};';
       bleProvider.sendCommand(batchCommand);
-      previousNameBoard1 = currentNameBoard1;
-      previousNameBoard2 = currentNameBoard2;
       previousInitialBrightness = currentInitialBrightness;
       previousBlockSize = currentBlockSize;
       previousEffectSpeed = currentEffectSpeed;
       previousCelebrationDuration = currentCelebrationDuration;
       previousInactivityTimeout = currentInactivityTimeout;
+      previousDeepSleepTimeout = currentDeepSleepTimeout;
       previousInitialStartupColor = initialStartupColor;
       previousSportEffectColor1 = sportEffectColor1;
       previousSportEffectColor2 = sportEffectColor2;
@@ -190,22 +179,15 @@ class SetupScreenState extends State<SetupScreen>
     }
   }
 
-  void onBackButtonPressed() {
-    Navigator.pop(context, {
-      'lightsOn': lightsOn,
-      'espNowEnabled': espNowEnabled,
-    });
-  }
-
   void updateUIWithCurrentSettings() {
     setState(() {
-      boardName1Controller.text = nameBoard1;
-      boardName2Controller.text = nameBoard2;
+
       initialBrightness = initialBrightness;
       blockSize = blockSize;
       effectSpeed = effectSpeed;
       celebrationDuration = celebrationDuration;
       inactivityTimeout = inactivityTimeout;
+      deepSleepTimeout = deepSleepTimeout;
       initialStartupColor = initialStartupColor;
       sportEffectColor1 = sportEffectColor1;
       sportEffectColor2 = sportEffectColor2;
@@ -295,7 +277,7 @@ class SetupScreenState extends State<SetupScreen>
       }
     }
   }
-
+  void onBackButtonPressed(){}
   void clearSavedVariables() async {
     bool? confirmed = await showDialog<bool>(
       context: context,
@@ -485,86 +467,22 @@ class SetupScreenState extends State<SetupScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          TextField(
-            controller: boardName1Controller,
-            decoration: const InputDecoration(
-              labelText: "Board 1 Name",
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: boardName2Controller,
-            decoration: const InputDecoration(
-              labelText: "Board 2 Name",
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 20),
           const Divider(
             color: Colors.blue,
             thickness: 2,
           ),
-          const SizedBox(height: 20),
-          buildSliderInput(
-            "Initial Brightness",
-            initialBrightness,
-            0,
-            100,
-            1,
-            (value) {
-              setState(() {
-                initialBrightness = value;
-              });
-            },
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child:           buildSliderInput(
-            "Initial Brightness",
-            initialBrightness,
-            0,
-            100,
-            1,
-            (value) {
-              setState(() {
-                initialBrightness = value;
-              });
-            },
-          ),
-             ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: buildSliderInput(
-                  "Effects Speed",
-                  effectSpeed,
-                  1,
-                  50,
-                  1,
-                  (value) {
-                    setState(() {
-                      effectSpeed = value;
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
+         Row(
             children: [
               Expanded(
                 child: buildSliderInput(
-                  "Effects Size",
-                  blockSize,
-                  1,
-                  30,
+                  "Initial Brightness",
+                  initialBrightness,
+                  0,
+                  100,
                   1,
                   (value) {
                     setState(() {
-                      blockSize = value;
+                      initialBrightness = value;
                     });
                   },
                 ),
@@ -591,7 +509,7 @@ class SetupScreenState extends State<SetupScreen>
             children: [
               Expanded(
                 child: buildSliderInput(
-                  "Scoring Duration (seconds)",
+                  "Scoring Duration",
                   celebrationDuration / 1000, // Convert ms to seconds
                   1,
                   10,
@@ -606,6 +524,26 @@ class SetupScreenState extends State<SetupScreen>
               const SizedBox(width: 20),
               Expanded(
                 child: buildSliderInput(
+                  "Effects Size",
+                  blockSize,
+                  1,
+                  50,
+                  1,
+                  (value) {
+                    setState(() {
+                      blockSize = value;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const SizedBox(width: 20),
+              Expanded(
+                child: buildSliderInput(
                   "Timeout (minutes)",
                   inactivityTimeout,
                   0,
@@ -614,6 +552,20 @@ class SetupScreenState extends State<SetupScreen>
                   (value) {
                     setState(() {
                       inactivityTimeout = value;
+                    });
+                  },
+                ),
+              ),
+              Expanded(
+                child: buildSliderInput(
+                  "Shutdown Timeout",
+                  deepSleepTimeout,
+                  1,
+                  30,
+                  1,
+                  (value) {
+                    setState(() {
+                      deepSleepTimeout = value;
                     });
                   },
                 ),

@@ -359,59 +359,51 @@ class BLEProvider with ChangeNotifier {
         return;
       }
 
-      final Map<String, Map<String, String>> boardData = {};
-      String? macKey;
+      // TEMPORARY INDEXED PARSE
+      final Map<String, Map<String, String>> rawDataByIndex = {};
       final fields = value.split(';');
 
       for (final field in fields) {
         if (field.isEmpty || !field.contains(':')) continue;
-
         final parts = field.split(':');
         if (parts.length != 2) continue;
 
         final tag = parts[0];
         final val = parts[1];
-
         final match = RegExp(r'^(r|n|m|l|v|ver)(\d+)$').firstMatch(tag);
         if (match == null) continue;
 
         final key = match.group(1)!;
-        //final index = match.group(2)!;
+        final index = match.group(2)!;
 
-        // Normalize MAC and use as unique key
-        if (key == 'm') {
-          macKey = normalizeMac(val);
-        }
-
-        if (macKey != null) {
-          boardData.putIfAbsent(macKey, () => {});
-          boardData[macKey]![key] = val;
-        }
+        rawDataByIndex.putIfAbsent(index, () => {});
+        rawDataByIndex[index]![key] = val;
       }
 
       final List<BoardInfo> updatedBoards = [];
 
-      for (final entry in boardData.entries) {
-        final mac = entry.key;
+      for (final entry in rawDataByIndex.entries) {
+        final index = entry.key;
         final data = entry.value;
 
-        logger.i("✅ Parsed board $mac => $data");
+        final rawMac = data['m'];
+        if (rawMac == null || rawMac.isEmpty) {
+          logger.w("⚠️ Skipping board $index due to missing MAC");
+          continue;
+        }
 
-        final newInfo = BoardInfo(
+        final mac = normalizeMac(rawMac);
+        final board = BoardInfo(
           role: data['r'] ?? '',
-          name: data['n'] ?? '',
+          name: data['n'] ?? 'Board $index',
           mac: mac,
           batteryLevel: int.tryParse(data['l'] ?? '') ?? 0,
           batteryVoltage: int.tryParse(data['v'] ?? '') ?? 0,
           version: data['ver'] ?? '',
         );
 
-        if (newInfo.mac.isEmpty) {
-          logger.w("⚠️ Skipping board due to missing MAC");
-          continue;
-        }
-
-        updatedBoards.add(newInfo);
+        logger.i("✅ Parsed board $mac => ${board.role}, ${board.name}");
+        updatedBoards.add(board);
       }
 
       if (updatedBoards.isNotEmpty) {
@@ -533,6 +525,10 @@ class BLEProvider with ChangeNotifier {
         logger.i("Celebration duration set to: $celebrationDuration");
       } else if (setting.startsWith("TIMEOUT:")) {
         inactivityTimeout =
+            double.tryParse(setting.substring(8)) ?? deepSleepTimeout;
+        logger.i("Deep Sllep timeout set to: $deepSleepTimeout");
+      } else if (setting.startsWith("DEEPSLEEP:")) {
+        deepSleepTimeout =
             double.tryParse(setting.substring(8)) ?? inactivityTimeout;
         logger.i("Inactivity timeout set to: $inactivityTimeout");
       } else {
@@ -624,11 +620,6 @@ class BLEProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void setNameBoard1(String value) {
-    _nameBoard1 = value;
-    notifyListeners();
-  }
-
   void setMacAddrBoard1(String value) {
     _macAddrBoard1 = value;
     notifyListeners();
@@ -650,11 +641,6 @@ class BLEProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void setNameBoard2(String value) {
-    _nameBoard2 = value;
-    notifyListeners();
-  }
-
   void setMacAddrBoard2(String value) {
     _macAddrBoard2 = value;
     notifyListeners();
@@ -667,17 +653,6 @@ class BLEProvider with ChangeNotifier {
 
   void setBatteryLevelBoard2(int value) {
     _batteryLevelBoard2 = value;
-    notifyListeners();
-  }
-
-  // Setters for Wi-Fi Credentials
-  void setSsid(String newSsid) {
-    _ssid = newSsid;
-    notifyListeners();
-  }
-
-  void setPassword(String newPassword) {
-    _password = newPassword;
     notifyListeners();
   }
 }

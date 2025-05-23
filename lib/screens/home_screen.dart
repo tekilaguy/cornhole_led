@@ -19,19 +19,14 @@ class HomeScreen extends StatefulWidget {
   HomeScreenState createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMixin{
+class HomeScreenState extends State<HomeScreen>
+    with AutomaticKeepAliveClientMixin {
   final Logger logger = Logger();
-  BLEProvider get bleProvider => Provider.of<BLEProvider>(context, listen: false);
+  BLEProvider get bleProvider =>
+      Provider.of<BLEProvider>(context, listen: false);
 
   @override
   bool get wantKeepAlive => true;
-
-  // List<BluetoothDevice> devicesList = [];
-  // BluetoothDevice? connectedDevice;
-  // BluetoothCharacteristic? writeCharacteristic;
-  // BluetoothCharacteristic? notifyCharacteristic;
-  // Timer? reconnectTimer; // Timer to handle reconnection attempts
-  // static const reconnectDuration = Duration(seconds: 30);
 
   int getColorIndexFromRGB(int r, int g, int b) {
     int closestColorIndex = 0;
@@ -63,13 +58,12 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   void initState() {
     super.initState();
     homeScreenState = this; // Reference to this state
-  
+
     //  if (isConnected) {
     //   requestCurrentSettings(); // Request the current settings from the board
     // }
   }
 
- 
 // Inside HomeScreenState class
 
   void navigateToInfoScreen() async {
@@ -79,18 +73,14 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       'isConnected': isConnected,
       'connectionInfo': connectionInfo,
       'boardRole1': boardRole1,
-      'nameBoard1': nameBoard1,
       'macAddrBoard1': macAddrBoard1,
-      'ipAddrBoard1': ipAddrBoard1,
       'batteryLevelBoard1': batteryLevelBoard1,
       'batteryVoltageBoard1': batteryVoltageBoard1,
       'boardRole2': boardRole2,
-      'nameBoard2': nameBoard2,
       'macAddrBoard2': macAddrBoard2,
-      'ipAddrBoard2': ipAddrBoard2,
       'batteryLevelBoard2': batteryLevelBoard2,
       'batteryVoltageBoard2': batteryVoltageBoard2,
-        'sendCommand':   bleProvider.sendCommand, // Ensure this is correctly passed
+      'sendCommand': bleProvider.sendCommand, // Ensure this is correctly passed
     });
 
     if (result != null && result is Map<String, dynamic>) {
@@ -106,27 +96,24 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       context,
       '/setup',
       arguments: {
-        'ssid': ssid,
-        'password': password,
         'boardRole1': boardRole1,
         'boardRole2': boardRole2,
-        'nameBoard1': nameBoard1,
-        'nameBoard2': nameBoard2,
         'initialBrightness': initialBrightness,
         'effectSpeed': effectSpeed,
         'blockSize': blockSize,
         'celebrationDuration': celebrationDuration,
         'inactivityTimeout': inactivityTimeout,
+        'deepSleepTimeout': deepSleepTimeout,
         'sportEffectColor1': sportEffectColor1,
         'sportEffectColor2': sportEffectColor2,
         'initialStartupColor': initialStartupColor,
-        'sendCommand':   bleProvider.sendCommand, // Pass the sendCommand function
+        'sendCommand': bleProvider.sendCommand, // Pass the sendCommand function
       },
     );
 
     if (result != null && result is Map<String, dynamic>) {
       setState(() {
-          lightsOn = result['lightsOn'] ?? lightsOn;
+        lightsOn = result['lightsOn'] ?? lightsOn;
         espNowEnabled = result['espNowEnabled'] ?? espNowEnabled;
       });
     }
@@ -135,7 +122,6 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   @override
   Widget build(BuildContext context) {
     super.build(context);
-  
 
     return Scaffold(
       body: Stack(
@@ -149,9 +135,9 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                 children: [
                   const SizedBox(height: 20),
                   // ignore: unnecessary_null_comparison
-                        context.watch<BLEProvider>().isConnected
-                            ? buildControlScreen()
-                            : bleProvider.buildDeviceList(),
+                  context.watch<BLEProvider>().isConnected
+                      ? buildControlScreen()
+                      : bleProvider.buildDeviceList(),
                   const SizedBox(height: 20),
                   const StatusIndicators(),
                 ],
@@ -176,7 +162,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                 colors.length, (index) => buildColorButton(index)),
           ),
         ),
-        const SizedBox(height: 15),
+
         Section(
           title: 'Effects',
           content: Wrap(
@@ -194,7 +180,6 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
             ),
           ),
         ),
-        const SizedBox(height: 15),
         Section(
           title: 'Brightness',
           content: Slider(
@@ -209,6 +194,33 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
               bleProvider.sendBrightness(brightness);
             },
           ),
+        ),
+
+        /// 🧭 Lights + Sync Toggles (condensed)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(
+              children: [
+                const Icon(Icons.lightbulb_outline, color: Colors.white),
+                Switch(
+                  value: bleProvider.lightsOn,
+                  onChanged: (_) => bleProvider.toggleLights(),
+                  activeColor: Colors.lightBlue,
+                ),
+              ],
+            ),
+            Column(
+              children: [
+                const Icon(Icons.sync, color: Colors.white),
+                Switch(
+                  value: bleProvider.espNowEnabled,
+                  onChanged: (_) => bleProvider.toggleEspNow(),
+                  activeColor: Colors.lightBlue,
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     );
@@ -229,6 +241,22 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       label: label,
       isActive: activeEffect == effect,
       onPressed: () => bleProvider.sendEffect(effect),
+    );
+  }
+
+  Widget buildToggleSwitch(
+      String label, bool currentValue, VoidCallback toggleFn) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white)),
+        Switch(
+          value: currentValue,
+          onChanged: (_) => setState(() {
+            toggleFn();
+          }),
+        ),
+      ],
     );
   }
 }
