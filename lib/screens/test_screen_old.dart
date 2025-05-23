@@ -49,7 +49,8 @@ class TestScreenState extends State<TestScreen>
   @override
   void initState() {
     super.initState();
-   
+    testScreenState = this;
+
     // Delay execution to ensure BLE context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (bleProvider.isConnected) {
