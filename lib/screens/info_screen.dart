@@ -31,6 +31,19 @@ class InfoScreenState extends State<InfoScreen>
     });
   }
 
+  int _compareVersions(String v1, String v2) {
+    final parts1 = v1.split('.').map(int.tryParse).toList();
+    final parts2 = v2.split('.').map(int.tryParse).toList();
+
+    for (int i = 0; i < 3; i++) {
+      final p1 = (i < parts1.length && parts1[i] != null) ? parts1[i]! : 0;
+      final p2 = (i < parts2.length && parts2[i] != null) ? parts2[i]! : 0;
+      if (p1 < p2) return -1;
+      if (p1 > p2) return 1;
+    }
+    return 0; // equal
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -65,8 +78,12 @@ class InfoScreenState extends State<InfoScreen>
                           itemCount: boards.length,
                           itemBuilder: (context, index) {
                             final board = boards[index];
-                            final isOutdated =
-                                board.version != latestFirmwareVersion;
+                            final isOutdated = latestFirmwareVersion
+                                    .isNotEmpty &&
+                                board.version.isNotEmpty &&
+                                _compareVersions(
+                                        board.version, latestFirmwareVersion) <
+                                    0;
 
                             return GestureDetector(
                               onTap: () {

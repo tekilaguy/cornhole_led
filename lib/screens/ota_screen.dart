@@ -1,5 +1,6 @@
 // ota_screen.dart
 import 'package:http/http.dart' as http;
+import 'dart:math';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
@@ -10,19 +11,6 @@ import '/ble_provider.dart';
 import '/widgets/background.dart';
 import '/widgets/section.dart';
 import '/widgets/status_indicators.dart';
-
-Future<Map<String, dynamic>> fetchUpdate() async {
-var data;
-final version = data['version'] ?? '';
-latestFirmwareVersion = version;
-  final response = await http.get(Uri.parse(
-      'https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates/cornhole_board_version.json'));
-  if (response.statusCode == 200) {
-    return json.decode(response.body);
-  } else {
-    throw Exception('Failed to load update');
-  }
-}
 
 class Update {
   final String url;
@@ -66,7 +54,7 @@ class OTAScreenState extends State<OTAScreen>
   void initState() {
     super.initState();
     otaScreenState = this;
-       _updateFuture = fetchUpdate();
+    _updateFuture = fetchUpdate();
   }
 
   void logMessage(String message) {
@@ -140,6 +128,59 @@ class OTAScreenState extends State<OTAScreen>
         _isUpdating = false;
       });
     }
+  }
+
+  Future<Map<String, dynamic>> fetchUpdate() async {
+    final response = await http.get(Uri.parse(
+        'https://raw.githubusercontent.com/tekilaguy/cornhole_led/main/updates/cornhole_board_version.json'));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final version = data['version'] ?? '';
+      latestFirmwareVersion = version;
+      return data;
+    } else {
+      throw Exception('Failed to fetch update info');
+    }
+  }
+
+  Future<void> performOta(String url,
+      {void Function(double percent)? onProgress}) async {
+    if (bleProvider.otaCharacteristic == null) {
+      logger.e("No OTA characteristic in discoverServices!");
+      return;
+    }
+
+    // 1) fetch the BIN
+    final resp = await http.get(Uri.parse(url));
+    if (resp.statusCode != 200) {
+      logger.e("HTTP ${resp.statusCode} fetching firmware");
+      return;
+    }
+    final firmware = resp.bodyBytes;
+    final total = firmware.length;
+    logger.i("📥 Downloaded $total bytes for OTA");
+
+    // 2) signal BEGIN
+    await bleProvider.otaCharacteristic!.write(utf8.encode("BEGIN"));
+
+    // 3) chunk & write
+    final chunkSize = max(
+        (bleProvider.negotiatedMtu > 3 ? bleProvider.negotiatedMtu - 3 : 20),
+        128);
+    int offset = 0;
+    while (offset < total) {
+      final end = min(offset + chunkSize, total);
+      final chunk = firmware.sublist(offset, end);
+      await bleProvider.otaCharacteristic!.write(chunk, withoutResponse: false);
+      offset = end;
+      onProgress?.call(offset / total);
+      await Future.delayed(const Duration(milliseconds: 20)); // pacing
+    }
+
+    // 4) finish
+    await bleProvider.otaCharacteristic!.write(utf8.encode("END"));
+    logger.i("✅ OTA upload finished");
   }
 
   @override

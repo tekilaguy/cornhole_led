@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:logger/logger.dart';
+
 import 'dart:convert';
 import 'dart:async';
 import 'global.dart';
@@ -15,6 +16,14 @@ class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
 
   List<BluetoothDevice> devicesList = [];
+  static final _otaServiceUuid = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  static final _otaCharacteristicUuid =
+      Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
+  static final _otaVersionUuid = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+
+  BluetoothCharacteristic? otaCharacteristic;
+  BluetoothCharacteristic? versionCharacteristic;
+
   BluetoothDevice? connectedDevice;
   BluetoothDevice? device;
   BluetoothCharacteristic? writeCharacteristic;
@@ -255,6 +264,15 @@ class BLEProvider with ChangeNotifier {
       // ②  Now discover services
       List<BluetoothService> services = await device.discoverServices();
       for (BluetoothService service in services) {
+        // capture your OTA characteristic
+        if (service.uuid == _otaServiceUuid) {
+          for (var c in service.characteristics) {
+            if (c.uuid == _otaCharacteristicUuid) {
+              otaCharacteristic = c;
+              logger.i("✅ Found OTA characteristic");
+            }
+          }
+        }
         for (BluetoothCharacteristic characteristic
             in service.characteristics) {
           if (characteristic.properties.write) {
@@ -277,6 +295,7 @@ class BLEProvider with ChangeNotifier {
       logger.e("Failed to discover services: $e");
     }
   }
+
 
   void scanForDevices({bool rescan = false}) {
     if (isScanning && !rescan) return;

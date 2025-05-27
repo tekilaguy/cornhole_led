@@ -133,7 +133,7 @@ class SetupScreenState extends State<SetupScreen>
       commands.add('TIMEOUT:$currentInactivityTimeout');
     }
     if (currentDeepSleepTimeout != previousDeepSleepTimeout) {
-      commands.add('TIMEOUT:$currentDeepSleepTimeout');
+      commands.add('DEEPSLEEP:$currentDeepSleepTimeout');
     }
     if (initialStartupColor != previousInitialStartupColor) {
       int red = (initialStartupColor.value >> 16) & 0xFF;
