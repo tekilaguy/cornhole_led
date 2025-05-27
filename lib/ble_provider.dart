@@ -128,6 +128,12 @@ class BLEProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String?> readBoardVersion() async {
+    if (versionCharacteristic == null) return null;
+    final raw = await versionCharacteristic!.read();
+    return utf8.decode(raw);
+  }
+
   BLEProvider() {
     initializeBluetooth();
     if (isConnected) {
@@ -275,9 +281,13 @@ class BLEProvider with ChangeNotifier {
         }
         for (BluetoothCharacteristic characteristic
             in service.characteristics) {
-          if (characteristic.properties.write) {
-            writeCharacteristic = characteristic;
-          }
+ if (service.uuid == _controlServiceUuid) {
+  for (var c in service.characteristics) {
+    if (c.uuid == _controlCharacteristicUuid) {
+      writeCharacteristic = c;
+    }
+  }
+}
           if (characteristic.properties.notify) {
             notifyCharacteristic = characteristic;
             await notifyCharacteristic?.setNotifyValue(true);
@@ -295,7 +305,6 @@ class BLEProvider with ChangeNotifier {
       logger.e("Failed to discover services: $e");
     }
   }
-
 
   void scanForDevices({bool rescan = false}) {
     if (isScanning && !rescan) return;

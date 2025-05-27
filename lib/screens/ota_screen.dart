@@ -252,9 +252,33 @@ class OTAScreenState extends State<OTAScreen>
               ),
               const SizedBox(height: 10),
               ElevatedButton(
-                onPressed:
-                    (_isUpdating || !_updateAvailable) ? null : startOtaProcess,
-                child: const Text("Start Board Update"),
+                onPressed: (_isUpdating || !_updateAvailable)
+                    ? null
+                    : () async {
+                        setState(() {
+                          _isUpdating = true;
+                          logs.clear();
+                        });
+
+                        final boardVer = await bleProvider.readBoardVersion();
+                        logMessage("🔍 Board reports version: $boardVer");
+
+                        if (boardVer != null &&
+                            boardVer != latestFirmwareVersion) {
+                          await performOta(
+                            update.url,
+                            onProgress: (p) => setState(() => progress = p),
+                          );
+                          logMessage("✅ OTA upload done");
+                        } else {
+                          logMessage("🟢 No update needed");
+                        }
+
+                        setState(() {
+                          _isUpdating = false;
+                        });
+                      },
+                child: Text("Start OTA"),
               ),
             ],
           ),
