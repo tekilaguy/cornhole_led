@@ -43,6 +43,9 @@ class OTAScreenState extends State<OTAScreen>
   bool _isUpdating = false;
   bool _updateAvailable = false;
 
+  Update? update;
+  double progress = 0.0;
+
   List<String> logs = [];
   BLEProvider get bleProvider =>
       Provider.of<BLEProvider>(context, listen: false);
@@ -80,11 +83,11 @@ class OTAScreenState extends State<OTAScreen>
     });
 
     _updateFuture.then((jsonData) {
-      final update = Update.fromJson(jsonData);
+      update = Update.fromJson(jsonData);
 
-      logMessage("✅ Latest Version: ${update.version}");
-      logMessage("🧩 File: ${update.bin}");
-      logMessage("🌐 URL: ${update.url}");
+      logMessage("✅ Latest Version: ${update!.version}");
+      logMessage("🧩 File: ${update!.bin}");
+      logMessage("🌐 URL: ${update!.url}");
 
       final boards = bleProvider.boards;
 
@@ -93,7 +96,7 @@ class OTAScreenState extends State<OTAScreen>
       } else {
         bool anyOutdated = false;
         for (final board in boards) {
-          if (board.version != update.version) {
+          if (board.version != update!.version) {
             logMessage(
                 "⬆️ ${board.name} (${board.role}) has version ${board.version}. Update available.");
             anyOutdated = true;
@@ -264,9 +267,11 @@ class OTAScreenState extends State<OTAScreen>
                         logMessage("🔍 Board reports version: $boardVer");
 
                         if (boardVer != null &&
-                            boardVer != latestFirmwareVersion) {
+                            update != null &&
+                            boardVer != update!.version &&
+                            update!.url.isNotEmpty) {
                           await performOta(
-                            update.url,
+                            update!.url,
                             onProgress: (p) => setState(() => progress = p),
                           );
                           logMessage("✅ OTA upload done");

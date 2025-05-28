@@ -16,10 +16,14 @@ class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
 
   List<BluetoothDevice> devicesList = [];
-  static final _otaServiceUuid = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  static final _otaCharacteristicUuid =
+  final Guid _otaServiceUuid = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  final Guid _otaCharacteristicUuid =
       Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
-  static final _otaVersionUuid = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+  final Guid _versionCharacteristicUuid =
+      Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+  final Guid _controlServiceUuid = Guid("baf6443e-a714-4114-8612-8fc18d1326f7");
+  final Guid _controlCharacteristicUuid =
+      Guid("5d650eb7-c41b-44f0-9704-3710f21e1c8e");
 
   BluetoothCharacteristic? otaCharacteristic;
   BluetoothCharacteristic? versionCharacteristic;
@@ -44,7 +48,7 @@ class BLEProvider with ChangeNotifier {
   bool get espNowEnabled => _espNowEnabled;
   Color get initialStartupColor => _initialStartupColor;
 
-  int _negotiatedMtu = 512; // default BLE MTU
+  final int _negotiatedMtu = 512; // default BLE MTU
   int get negotiatedMtu => _negotiatedMtu;
 
   String normalizeMac(String mac) {
@@ -129,9 +133,20 @@ class BLEProvider with ChangeNotifier {
   }
 
   Future<String?> readBoardVersion() async {
-    if (versionCharacteristic == null) return null;
-    final raw = await versionCharacteristic!.read();
-    return utf8.decode(raw);
+    if (versionCharacteristic == null) {
+      logger.w("❌ versionCharacteristic is null");
+      return null;
+    }
+
+    try {
+      final raw = await versionCharacteristic!.read();
+      final decoded = utf8.decode(raw);
+      logger.i("📦 Board version read: $decoded");
+      return decoded;
+    } catch (e) {
+      logger.e("❌ Failed to read board version: $e");
+      return null;
+    }
   }
 
   BLEProvider() {
@@ -213,7 +228,6 @@ class BLEProvider with ChangeNotifier {
       await Future.delayed(Duration(milliseconds: 500)); // allow iOS sync
 
       if (Platform.isAndroid) {
-        // Only Android supports MTU negotiation
         try {
           await device.requestMtu(512); // Use a safe high value
           logger.i("MTU requested");
@@ -261,33 +275,34 @@ class BLEProvider with ChangeNotifier {
 
   Future<void> discoverServices(BluetoothDevice device) async {
     try {
-      // ①  Negotiate MTU
-      // ignore: unused_local_variable
-      //final mtu = await MtuNegotiator().negotiate(device);
-      // You can keep it in a field if you want to show it in the UI:
-      _negotiatedMtu = await device.requestMtu(512);
-
-      // ②  Now discover services
       List<BluetoothService> services = await device.discoverServices();
       for (BluetoothService service in services) {
-        // capture your OTA characteristic
+        // 🔄 Check OTA service
         if (service.uuid == _otaServiceUuid) {
           for (var c in service.characteristics) {
             if (c.uuid == _otaCharacteristicUuid) {
               otaCharacteristic = c;
               logger.i("✅ Found OTA characteristic");
+            } else if (c.uuid == _versionCharacteristicUuid) {
+              versionCharacteristic = c;
+              logger.i("✅ Found Version characteristic");
             }
           }
         }
+
+        // 🔄 Check control service
+        if (service.uuid == _controlServiceUuid) {
+          for (var c in service.characteristics) {
+            if (c.uuid == _controlCharacteristicUuid) {
+              writeCharacteristic = c;
+              logger.i("✅ Found Write characteristic");
+            }
+          }
+        }
+
+        // 🔄 Look for notify-capable characteristics
         for (BluetoothCharacteristic characteristic
             in service.characteristics) {
- if (service.uuid == _controlServiceUuid) {
-  for (var c in service.characteristics) {
-    if (c.uuid == _controlCharacteristicUuid) {
-      writeCharacteristic = c;
-    }
-  }
-}
           if (characteristic.properties.notify) {
             notifyCharacteristic = characteristic;
             await notifyCharacteristic?.setNotifyValue(true);
@@ -299,10 +314,10 @@ class BLEProvider with ChangeNotifier {
           }
         }
       }
-      // If discovery is successful, update the connection state
+
       updateConnectionState(true, device);
     } catch (e) {
-      logger.e("Failed to discover services: $e");
+      logger.e("❌ Failed to discover services: $e");
     }
   }
 
@@ -312,9 +327,11 @@ class BLEProvider with ChangeNotifier {
     if (rescan) devicesList.clear();
 
     isScanning = true;
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 4)).then((_) {
-      isScanning = false;
-    });
+    if (!FlutterBluePlus.isScanningNow) {
+      FlutterBluePlus.startScan(timeout: const Duration(seconds: 4)).then((_) {
+        isScanning = false;
+      });
+    }
 
     scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult result in results) {
