@@ -274,7 +274,27 @@ class OTAScreenState extends State<OTAScreen>
                             update!.url,
                             onProgress: (p) => setState(() => progress = p),
                           );
+
                           logMessage("✅ OTA upload done");
+
+                          // STEP 1: Check if any board needs upgrade
+                          final boards = bleProvider.boards;
+                          final outdatedBoards = boards
+                              .where((b) => b.version != update!.version)
+                              .toList();
+
+                          if (outdatedBoards.isNotEmpty) {
+                            logMessage(
+                                "🔁 Flipping roles to update ${outdatedBoards.first.name}...");
+                            await bleProvider
+                                .sendCommand("SET_ROLE:SECONDARY;");
+                            // STEP 2: Wait for the boards to reboot & roles to flip
+                            await Future.delayed(const Duration(seconds: 6));
+                            bleProvider.disconnectDevice();
+                            await Future.delayed(const Duration(seconds: 3));
+                            bleProvider.scanForDevices(
+                                rescan: true); // reconnect to new PRIMARY
+                          }
                         } else {
                           logMessage("🟢 No update needed");
                         }

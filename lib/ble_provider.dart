@@ -38,6 +38,9 @@ class BLEProvider with ChangeNotifier {
   Timer? reconnectTimer;
   static const reconnectDuration = Duration(seconds: 30);
 
+  bool _shouldRefreshInfo = false;
+  bool get shouldRefreshInfo => _shouldRefreshInfo;
+
   bool _isConnected = false;
   bool _lightsOn = true;
   bool _espNowEnabled = true;
@@ -96,6 +99,15 @@ class BLEProvider with ChangeNotifier {
   void setConnected(bool value) {
     _isConnected = value;
     notifyListeners();
+  }
+
+  void markInfoStale() {
+    _shouldRefreshInfo = true;
+    notifyListeners();
+  }
+
+  void clearInfoRefreshFlag() {
+    _shouldRefreshInfo = false;
   }
 
   void setLightsOn(bool value) {
@@ -271,6 +283,8 @@ class BLEProvider with ChangeNotifier {
     _isConnected = state;
     connectedDevice = device;
     notifyListeners();
+    markInfoStale();
+    sendCommand("CMD:INFO;");
   }
 
   Future<void> discoverServices(BluetoothDevice device) async {
