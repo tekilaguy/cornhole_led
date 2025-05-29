@@ -276,8 +276,8 @@ class OTAScreenState extends State<OTAScreen>
                             update != null &&
                             boardVer != update!.version &&
                             update!.url.isNotEmpty) {
-                          await performOta(
-                            update!.url,
+                          final fullUrl = update!.url + update!.bin;await performOta(
+                            fullUrl,
                             onProgress: (p) => setState(() => progress = p),
                           );
 
