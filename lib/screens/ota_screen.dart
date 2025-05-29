@@ -60,6 +60,10 @@ class OTAScreenState extends State<OTAScreen>
     _updateFuture = fetchUpdate();
   }
 
+  void refreshUIFromBoardData() {
+
+  }
+
   void logMessage(String message) {
     setState(() {
       logs.add(message);

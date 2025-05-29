@@ -49,6 +49,10 @@ class InfoScreenState extends State<InfoScreen>
     super.build(context);
     final boards = context.watch<BLEProvider>().boards;
 
+    if (bleProvider.shouldRefreshInfo) {
+      bleProvider.clearInfoRefreshFlag();
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Connection Information'),
@@ -107,16 +111,19 @@ class InfoScreenState extends State<InfoScreen>
                                           color: Colors.white70),
                                     ),
                                     if (isOutdated)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Text(
-                                          "⚠️ Upgrade Available",
-                                          style: const TextStyle(
-                                            color: Colors.amber,
-                                            fontWeight: FontWeight.bold,
-                                            fontStyle: FontStyle.italic,
+                                      Row(
+                                        children: const [
+                                          Icon(Icons.system_update,
+                                              color: Colors.orange),
+                                          Text(
+                                            "⚠️ Upgrade Available",
+                                            style: TextStyle(
+                                              color: Colors.amber,
+                                              fontWeight: FontWeight.bold,
+                                              fontStyle: FontStyle.italic,
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ),
                                   ],
                                 ),
