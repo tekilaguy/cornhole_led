@@ -1,4 +1,4 @@
-  WidgetsFlutterBinding.ensureInitialized();
-  await FlutterBluePlus.instance.adapterState.firstWhere(
-    (state) => state == BluetoothAdapterState.on,
-  );
+<key>com.apple.developer.bluetooth</key>
+<array>
+    <string>central</string>
+</array>
