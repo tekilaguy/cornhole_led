@@ -104,3 +104,14 @@ List<String> effects = [
   'America',
   'Sports',
 ];
+
+
+final GlobalKey<OTAScreenState> otaScreenKey = GlobalKey();
+
+void logOtaMessage(String msg) {
+  if (otaScreenKey.currentState != null) {
+    otaScreenKey.currentState!.logMessage(msg);
+  } else {
+    debugPrint("OTA screen not mounted yet. Skipped log: $msg");
+  }
+}

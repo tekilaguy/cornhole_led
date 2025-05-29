@@ -47,6 +47,8 @@ class OTAScreenState extends State<OTAScreen>
   double progress = 0.0;
 
   List<String> logs = [];
+  final ScrollController _scrollController = ScrollController();
+
   BLEProvider get bleProvider =>
       Provider.of<BLEProvider>(context, listen: false);
 
@@ -65,6 +67,16 @@ class OTAScreenState extends State<OTAScreen>
   void logMessage(String message) {
     setState(() {
       logs.add(message);
+    });
+    // Auto-scroll to bottom
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
@@ -167,7 +179,7 @@ class OTAScreenState extends State<OTAScreen>
     logger.i("📥 Downloaded $total bytes for OTA");
 
     // 2) signal BEGIN
-    await bleProvider.otaCharacteristic!.write(utf8.encode("BEGIN"));
+    await bleProvider.otaCharacteristic!.write(utf8.encode("BEGIN:$total"));
 
     // 3) chunk & write
     final chunkSize = max(
@@ -186,6 +198,12 @@ class OTAScreenState extends State<OTAScreen>
     // 4) finish
     await bleProvider.otaCharacteristic!.write(utf8.encode("END"));
     logger.i("✅ OTA upload finished");
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -244,6 +262,7 @@ class OTAScreenState extends State<OTAScreen>
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: ListView.builder(
+                  controller: _scrollController,
                   itemCount: logs.length,
                   itemBuilder: (context, index) => Padding(
                     padding: const EdgeInsets.symmetric(
@@ -276,7 +295,9 @@ class OTAScreenState extends State<OTAScreen>
                             update != null &&
                             boardVer != update!.version &&
                             update!.url.isNotEmpty) {
-                          final fullUrl = update!.url + update!.bin;await performOta(
+                          final fullUrl = "${update!.url}${update!.bin}${update!.version}.bin";
+                          logMessage(fullUrl);
+await performOta(
                             fullUrl,
                             onProgress: (p) => setState(() => progress = p),
                           );

@@ -394,6 +394,15 @@ class BLEProvider with ChangeNotifier {
     logger.i("Received notification: $value");
 
     try {
+      if (value.contains("OTA_LOG:")) {
+        final entries = value.split(";");
+        for (final entry in entries) {
+          if (entry.startsWith("OTA_LOG:")) {
+            final clean = entry.replaceFirst("OTA_LOG:", "");
+            otaScreenState?.logMessage(clean); // ✅ line-by-line OTA logging
+          }
+        }
+      }
       if (value.startsWith("ColorIndex:")) {
         final colorIndex =
             int.tryParse(value.substring("ColorIndex:".length).trim());
@@ -732,3 +741,4 @@ class BoardInfo {
     this.isExpanded = false, // default to false
   });
 }
+
