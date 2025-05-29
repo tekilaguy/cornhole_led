@@ -399,7 +399,7 @@ class BLEProvider with ChangeNotifier {
         for (final entry in entries) {
           if (entry.startsWith("OTA_LOG:")) {
             final clean = entry.replaceFirst("OTA_LOG:", "");
-            otaScreenState?.logMessage(clean); // ✅ line-by-line OTA logging
+            otaScreenKey.currentState?.logMessage(clean); // ✅ line-by-line OTA logging
           }
         }
       }

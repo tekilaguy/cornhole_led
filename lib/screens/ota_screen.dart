@@ -58,7 +58,6 @@ class OTAScreenState extends State<OTAScreen>
   @override
   void initState() {
     super.initState();
-    otaScreenState = this;
     _updateFuture = fetchUpdate();
   }
 

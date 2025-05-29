@@ -36,7 +36,7 @@ class _TabScreenState extends State<TabScreen> {
       _screens = [
         const HomeScreen(),
         const InfoScreen(),
-        const OTAScreen(),
+        OTAScreen(key: otaScreenKey),
         SetupScreen(
           initialBrightness: initialBrightness,
           effectSpeed: effectSpeed,

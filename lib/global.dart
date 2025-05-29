@@ -68,7 +68,6 @@ Color sportEffectColor4 = const Color.fromARGB(255, 12, 35, 64);
 // Screen state references
 HomeScreenState? homeScreenState;
 SetupScreenState? setupScreenState;
-OTAScreenState? otaScreenState;
 InfoScreenState? infoScreenState;
 
 String latestFirmwareVersion = '';
