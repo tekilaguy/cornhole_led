@@ -60,9 +60,7 @@ class OTAScreenState extends State<OTAScreen>
     _updateFuture = fetchUpdate();
   }
 
-  void refreshUIFromBoardData() {
-
-  }
+  void refreshUIFromBoardData() {}
 
   void logMessage(String message) {
     setState(() {
@@ -268,6 +266,10 @@ class OTAScreenState extends State<OTAScreen>
                         });
 
                         final boardVer = await bleProvider.readBoardVersion();
+                        if (boardVer == null) {
+                          logMessage(
+                              "❌ Cannot read version: versionCharacteristic is null or BLE read failed.");
+                        }
                         logMessage("🔍 Board reports version: $boardVer");
 
                         if (boardVer != null &&

@@ -16,12 +16,12 @@ class BLEProvider with ChangeNotifier {
   final Logger logger = Logger();
 
   List<BluetoothDevice> devicesList = [];
-  final Guid _otaServiceUuid = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  // final Guid _otaServiceUuid = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
   final Guid _otaCharacteristicUuid =
       Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
   final Guid _versionCharacteristicUuid =
       Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
-  final Guid _controlServiceUuid = Guid("baf6443e-a714-4114-8612-8fc18d1326f7");
+  // final Guid _controlServiceUuid = Guid("baf6443e-a714-4114-8612-8fc18d1326f7");
   final Guid _controlCharacteristicUuid =
       Guid("5d650eb7-c41b-44f0-9704-3710f21e1c8e");
 
@@ -249,6 +249,16 @@ class BLEProvider with ChangeNotifier {
       }
 
       manageBluetoothState(device); // Now safe to manage state
+
+      await discoverServices(device);
+
+      if (versionCharacteristic == null) {
+        logger.w("⚠️ versionCharacteristic is still null after connect.");
+      }
+
+      // ⬇️ Optionally refresh board info
+      await Future.delayed(const Duration(seconds: 2));
+      sendCommand("CMD:INFO;");
     } catch (e) {
       logger.e("Cannot connect, exception occurred: $e");
       _isConnected = false;
@@ -291,34 +301,21 @@ class BLEProvider with ChangeNotifier {
     try {
       List<BluetoothService> services = await device.discoverServices();
       for (BluetoothService service in services) {
-        // 🔄 Check OTA service
-        if (service.uuid == _otaServiceUuid) {
-          for (var c in service.characteristics) {
-            if (c.uuid == _otaCharacteristicUuid) {
-              otaCharacteristic = c;
-              logger.i("✅ Found OTA characteristic");
-            } else if (c.uuid == _versionCharacteristicUuid) {
-              versionCharacteristic = c;
-              logger.i("✅ Found Version characteristic");
-            }
+        // Check each characteristic for known UUIDs
+        for (var c in service.characteristics) {
+          if (c.uuid == _otaCharacteristicUuid) {
+            otaCharacteristic = c;
+            logger.i("✅ Found OTA characteristic");
+          } else if (c.uuid == _versionCharacteristicUuid) {
+            versionCharacteristic = c;
+            logger.i("✅ Found Version characteristic");
+          } else if (c.uuid == _controlCharacteristicUuid) {
+            writeCharacteristic = c;
+            logger.i("✅ Found Write characteristic");
           }
-        }
 
-        // 🔄 Check control service
-        if (service.uuid == _controlServiceUuid) {
-          for (var c in service.characteristics) {
-            if (c.uuid == _controlCharacteristicUuid) {
-              writeCharacteristic = c;
-              logger.i("✅ Found Write characteristic");
-            }
-          }
-        }
-
-        // 🔄 Look for notify-capable characteristics
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.properties.notify) {
-            notifyCharacteristic = characteristic;
+          if (c.properties.notify) {
+            notifyCharacteristic = c;
             await notifyCharacteristic?.setNotifyValue(true);
             logger.i("✅ Notify characteristic enabled");
             notifyCharacteristic?.lastValueStream.listen((value) {
