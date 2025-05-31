@@ -17,8 +17,8 @@ class SetupScreen extends StatefulWidget {
   final double effectSpeed;
   final double blockSize;
   final double celebrationDuration;
-  final double inactivityTimeout;
-  final double deepSleepTimeout;
+  final int inactivityTimeout;
+  final int deepSleepTimeout;
   final Color sportEffectColor1;
   final Color sportEffectColor2;
   final Color initialStartupColor;
@@ -55,8 +55,8 @@ class SetupScreenState extends State<SetupScreen>
   double? previousBlockSize;
   double? previousEffectSpeed;
   double? previousCelebrationDuration;
-  double? previousInactivityTimeout;
-  double? previousDeepSleepTimeout;
+  int? previousInactivityTimeout;
+  int? previousDeepSleepTimeout;
   Color? previousInitialStartupColor;
   Color? previousSportEffectColor1;
   Color? previousSportEffectColor2;
@@ -74,7 +74,6 @@ class SetupScreenState extends State<SetupScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!setupComplete) {
-
       previousInitialBrightness = widget.initialBrightness;
       previousBlockSize = widget.blockSize;
       previousEffectSpeed = widget.effectSpeed;
@@ -84,7 +83,6 @@ class SetupScreenState extends State<SetupScreen>
       previousSportEffectColor1 = widget.sportEffectColor1;
       previousSportEffectColor2 = widget.sportEffectColor2;
       previousInitialStartupColor = widget.initialStartupColor;
-
 
       setState(() {
         isLoading = true; // Show loading indicator
@@ -115,7 +113,6 @@ class SetupScreenState extends State<SetupScreen>
     final currentCelebrationDuration = celebrationDuration;
     final currentInactivityTimeout = inactivityTimeout;
     final currentDeepSleepTimeout = deepSleepTimeout;
-
 
     if (currentInitialBrightness != previousInitialBrightness) {
       commands.add('BRIGHT:$currentInitialBrightness');
@@ -181,7 +178,6 @@ class SetupScreenState extends State<SetupScreen>
 
   void updateUIWithCurrentSettings() {
     setState(() {
-
       initialBrightness = initialBrightness;
       blockSize = blockSize;
       effectSpeed = effectSpeed;
@@ -277,7 +273,8 @@ class SetupScreenState extends State<SetupScreen>
       }
     }
   }
-  void onBackButtonPressed(){}
+
+  void onBackButtonPressed() {}
   void clearSavedVariables() async {
     bool? confirmed = await showDialog<bool>(
       context: context,
@@ -471,7 +468,7 @@ class SetupScreenState extends State<SetupScreen>
             color: Colors.blue,
             thickness: 2,
           ),
-         Row(
+          Row(
             children: [
               Expanded(
                 child: buildSliderInput(
@@ -545,13 +542,13 @@ class SetupScreenState extends State<SetupScreen>
               Expanded(
                 child: buildSliderInput(
                   "Timeout (minutes)",
-                  inactivityTimeout,
+                  inactivityTimeout as double,
                   0,
                   60,
                   1,
                   (value) {
                     setState(() {
-                      inactivityTimeout = value;
+                      inactivityTimeout = value as int;
                     });
                   },
                 ),
@@ -559,13 +556,13 @@ class SetupScreenState extends State<SetupScreen>
               Expanded(
                 child: buildSliderInput(
                   "Shutdown Timeout",
-                  deepSleepTimeout,
+                  deepSleepTimeout as double,
                   1,
                   30,
                   1,
                   (value) {
                     setState(() {
-                      deepSleepTimeout = value;
+                      deepSleepTimeout = value as int;
                     });
                   },
                 ),

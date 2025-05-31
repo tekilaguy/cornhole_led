@@ -590,11 +590,11 @@ class BLEProvider with ChangeNotifier {
         logger.i("Celebration duration set to: $celebrationDuration");
       } else if (setting.startsWith("TIMEOUT:")) {
         inactivityTimeout =
-            double.tryParse(setting.substring(8)) ?? deepSleepTimeout;
+            int.tryParse(setting.substring(8)) ?? deepSleepTimeout;
         logger.i("Deep Sllep timeout set to: $deepSleepTimeout");
       } else if (setting.startsWith("DEEPSLEEP:")) {
         deepSleepTimeout =
-            double.tryParse(setting.substring(8)) ?? inactivityTimeout;
+            int.tryParse(setting.substring(8)) ?? inactivityTimeout;
         logger.i("Inactivity timeout set to: $inactivityTimeout");
       } else {
         logger.w("Unexpected setting received: $setting");

@@ -111,7 +111,7 @@ class OTAScreenState extends State<OTAScreen>
         for (final board in boards) {
           if (board.version != update!.version) {
             logMessage(
-                "⬆️ ${board.name} (${board.role}) has version v${board.version}. Update available.");
+                "⬆️ ${board.name} (${board.role}) has version ${board.version}. Update available.");
             anyOutdated = true;
           } else {
             logMessage(
@@ -294,9 +294,10 @@ class OTAScreenState extends State<OTAScreen>
                             update != null &&
                             boardVer != update!.version &&
                             update!.url.isNotEmpty) {
-                          final fullUrl = "${update!.url}${update!.bin}_v${update!.version}.bin";
+                          final fullUrl =
+                              "${update!.url}${update!.bin}_v${update!.version}.bin";
                           logMessage(fullUrl);
-await performOta(
+                          await performOta(
                             fullUrl,
                             onProgress: (p) => setState(() => progress = p),
                           );

@@ -55,8 +55,8 @@ double initialBrightness = 50;
 double blockSize = 15;
 double effectSpeed = 25;
 double celebrationDuration = 4000;
-double inactivityTimeout = 10;
-double deepSleepTimeout = 10;
+int inactivityTimeout = 10;
+int deepSleepTimeout = 10;
 
 // Color settings
 Color initialStartupColor = Colors.blue;
