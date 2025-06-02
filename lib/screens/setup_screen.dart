@@ -17,8 +17,8 @@ class SetupScreen extends StatefulWidget {
   final double effectSpeed;
   final double blockSize;
   final double celebrationDuration;
-  final int inactivityTimeout;
-  final int deepSleepTimeout;
+  final double inactivityTimeout;
+  final double deepSleepTimeout;
   final Color sportEffectColor1;
   final Color sportEffectColor2;
   final Color initialStartupColor;
@@ -55,8 +55,8 @@ class SetupScreenState extends State<SetupScreen>
   double? previousBlockSize;
   double? previousEffectSpeed;
   double? previousCelebrationDuration;
-  int? previousInactivityTimeout;
-  int? previousDeepSleepTimeout;
+  double? previousInactivityTimeout;
+  double? previousDeepSleepTimeout;
   Color? previousInitialStartupColor;
   Color? previousSportEffectColor1;
   Color? previousSportEffectColor2;
@@ -542,13 +542,13 @@ class SetupScreenState extends State<SetupScreen>
               Expanded(
                 child: buildSliderInput(
                   "Timeout (minutes)",
-                  inactivityTimeout as double,
+                  inactivityTimeout,
                   0,
                   60,
                   1,
                   (value) {
                     setState(() {
-                      inactivityTimeout = value as int;
+                      inactivityTimeout = value;
                     });
                   },
                 ),
@@ -556,13 +556,13 @@ class SetupScreenState extends State<SetupScreen>
               Expanded(
                 child: buildSliderInput(
                   "Shutdown Timeout",
-                  deepSleepTimeout as double,
+                  deepSleepTimeout,
                   1,
                   30,
                   1,
                   (value) {
                     setState(() {
-                      deepSleepTimeout = value as int;
+                      deepSleepTimeout = value;
                     });
                   },
                 ),
