@@ -139,9 +139,11 @@ class OTAScreenState extends State<OTAScreen>
     logMessage(status);
     if (status.contains("Finished") ||
         status.contains("failed") ||
-        status.contains("low")) {
+        status.contains("low") ||
+        status.contains("FAIL")) {
       setState(() {
         _isUpdating = false;
+        _updateAvailable = true;
       });
     }
   }
@@ -274,6 +276,23 @@ class OTAScreenState extends State<OTAScreen>
                 ),
               ),
               const SizedBox(height: 10),
+              if (_isUpdating)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Column(
+                    children: [
+                      LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        "${(progress * 100).toStringAsFixed(0)}%",
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
               ElevatedButton(
                 onPressed: (_isUpdating || !_updateAvailable)
                     ? null
@@ -283,52 +302,65 @@ class OTAScreenState extends State<OTAScreen>
                           logs.clear();
                         });
 
-                        final boardVer = await bleProvider.readBoardVersion();
-                        if (boardVer == null) {
-                          logMessage(
-                              "❌ Cannot read version: versionCharacteristic is null or BLE read failed.");
-                        }
-                        logMessage("🔍 Board reports version: $boardVer");
-
-                        if (boardVer != null &&
-                            update != null &&
-                            boardVer != update!.version &&
-                            update!.url.isNotEmpty) {
-                          final fullUrl =
-                              "${update!.url}${update!.bin}_v${update!.version}.bin";
-                          logMessage(fullUrl);
-                          await performOta(
-                            fullUrl,
-                            onProgress: (p) => setState(() => progress = p),
-                          );
-
-                          logMessage("✅ OTA upload done");
-
-                          // STEP 1: Check if any board needs upgrade
-                          final boards = bleProvider.boards;
-                          final outdatedBoards = boards
-                              .where((b) => b.version != update!.version)
-                              .toList();
-
-                          if (outdatedBoards.isNotEmpty) {
-                            logMessage(
-                                "🔁 Flipping roles to update ${outdatedBoards.first.name}...");
-                            await bleProvider
-                                .sendCommand("SET_ROLE:SECONDARY;");
-                            // STEP 2: Wait for the boards to reboot & roles to flip
-                            await Future.delayed(const Duration(seconds: 6));
-                            bleProvider.disconnectDevice();
-                            await Future.delayed(const Duration(seconds: 3));
-                            bleProvider.scanForDevices(
-                                rescan: true); // reconnect to new PRIMARY
+                        try {
+                          final boardVer = await bleProvider.readBoardVersion();
+                          if (boardVer == null) {
+                            throw Exception(
+                                "❌ Cannot read version: versionCharacteristic is null or BLE read failed.");
                           }
-                        } else {
-                          logMessage("🟢 No update needed");
-                        }
+                          logMessage("🔍 Board reports version: $boardVer");
 
-                        setState(() {
-                          _isUpdating = false;
-                        });
+                          if (update == null || update!.url.isEmpty) {
+                            throw Exception(
+                                "❌ No update information available.");
+                          }
+
+                          if (boardVer != update!.version) {
+                            final fullUrl =
+                                "${update!.url}${update!.bin}_v${update!.version}.bin";
+                            logMessage("⬇️ Downloading: $fullUrl");
+
+                            await performOta(
+                              fullUrl,
+                              onProgress: (p) => setState(() => progress = p),
+                            );
+
+                            logMessage("✅ OTA upload done");
+
+                            // Post OTA: Check if any secondary boards exist
+                            final boards = bleProvider.boards;
+                            final outdatedBoards = boards
+                                .where((b) => b.version != update!.version)
+                                .toList();
+
+                            if (outdatedBoards.isNotEmpty) {
+                              logMessage(
+                                  "🔁 Flipping roles to update ${outdatedBoards.first.name}...");
+                              await bleProvider
+                                  .sendCommand("SET_ROLE:SECONDARY;");
+                              await Future.delayed(const Duration(seconds: 6));
+                              bleProvider.disconnectDevice();
+                              await Future.delayed(const Duration(seconds: 3));
+                              bleProvider.scanForDevices(
+                                  rescan: true); // Reconnect
+                            } else {
+                              logMessage("🟢 No other boards to update.");
+                            }
+                          } else {
+                            logMessage(
+                                "🟢 No update needed. Already on latest version.");
+                          }
+                        } catch (e) {
+                          logger.e("OTA failed: $e");
+                          logMessage("❌ OTA failed: $e");
+                          setState(() {
+                            _updateAvailable = true; // Allow Retry
+                          });
+                        } finally {
+                          setState(() {
+                            _isUpdating = false;
+                          });
+                        }
                       },
                 child: Text("Start OTA"),
               ),
