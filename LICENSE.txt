@@ -1,0 +1,32 @@
+
+PROPRIETARY LICENSE AGREEMENT
+Bluetrace Entertainment, LLC
+
+This software and hardware design (“The Product”) is proprietary to Bluetrace Entertainment, LLC and is licensed, not sold.
+
+1. LICENSE GRANT:
+You are granted a limited, non-transferable, non-sublicensable, and revocable license to use The Product only for evaluation or demonstration purposes unless otherwise authorized in writing.
+
+2. RESTRICTIONS:
+You may not:
+a. Modify, distribute, reproduce, or sublicense The Product
+b. Reverse-engineer, decompile, or disassemble The Product
+c. Use The Product in any commercial product or derivative work without a commercial license
+
+3. OWNERSHIP:
+Bluetrace retains all rights, title, and interest, including all intellectual property rights. This Agreement does not convey any ownership rights.
+
+4. CONFIDENTIALITY:
+Any unauthorized disclosure or misuse of The Product will constitute a material breach.
+
+5. TERMINATION:
+Any violation of this license voids your rights to The Product and may result in civil or criminal prosecution.
+
+6. DISCLAIMER:
+THE PRODUCT IS PROVIDED “AS IS” WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL BLUETRACE BE LIABLE FOR ANY DAMAGES, INCLUDING INCIDENTAL OR CONSEQUENTIAL DAMAGES.
+
+7. JURISDICTION:
+This Agreement shall be governed by the laws of the State of Texas. Any legal action shall be brought exclusively in Bexar County, Texas.
+
+For licensing inquiries or legal matters:
+legal@bluetrace.net
