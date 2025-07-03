@@ -4,5 +4,6 @@
     "idf.openOcdConfigs": [
         "interface/ftdi/esp32_devkitj_v1.cfg",
         "target/esp32s2.cfg"
-    ]
+    ],
+    "cmake.sourceDirectory": "G:/Dropbox/Documents/Bluetrace Entertainment/Cornhole Boards/App/cornhole_led/linux"
 }

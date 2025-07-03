@@ -399,7 +399,8 @@ class BLEProvider with ChangeNotifier {
         for (final entry in entries) {
           if (entry.startsWith("OTA_LOG:")) {
             final clean = entry.replaceFirst("OTA_LOG:", "");
-            otaScreenKey.currentState?.logMessage(clean); // ✅ line-by-line OTA logging
+            otaScreenKey.currentState
+                ?.logMessage(clean); // ✅ line-by-line OTA logging
           }
         }
       }
@@ -421,6 +422,13 @@ class BLEProvider with ChangeNotifier {
 
       if (value.startsWith("S:")) {
         handleSettingsResponse(value.substring(2));
+        return;
+      }
+
+      if (value.startsWith("TOGGLE:LIGHTS:")) {
+        final state = value.substring(14).toLowerCase();
+        _lightsOn = state == "on";
+        notifyListeners(); // ← if using ChangeNotifier
         return;
       }
 
@@ -602,7 +610,7 @@ class BLEProvider with ChangeNotifier {
     }
 
     // After settings are processed, update the UI
-    // setupScreenState?.updateUIWithCurrentSettings();
+    setupScreenState?.updateUIWithCurrentSettings();
   }
 
   Future<void> sendCommand(String command) async {
@@ -660,14 +668,14 @@ class BLEProvider with ChangeNotifier {
   void toggleLights() {
     _lightsOn = !lightsOn;
     logger.i("Lights toggled: ${lightsOn ? 'on' : 'off'}");
-    sendCommand('toggleLights:${lightsOn ? 'on' : 'off'};');
+    sendCommand('TOGGLE:LIGHTS:${lightsOn ? 'on' : 'off'};');
     notifyListeners();
   }
 
   void toggleEspNow() {
     _espNowEnabled = !espNowEnabled;
     logger.i("ESP-NOW toggled: ${espNowEnabled ? 'on' : 'off'}");
-    sendCommand('toggleEspNow:${espNowEnabled ? 'on' : 'off'};');
+    sendCommand('TOGGLE:ESPNOW:${espNowEnabled ? 'on' : 'off'};');
     notifyListeners();
   }
 
@@ -741,4 +749,3 @@ class BoardInfo {
     this.isExpanded = false, // default to false
   });
 }
-

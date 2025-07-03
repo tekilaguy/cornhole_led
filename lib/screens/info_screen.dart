@@ -47,6 +47,14 @@ class InfoScreenState extends State<InfoScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final bleProvider = context.watch<BLEProvider>();
+
+    if (!bleProvider.isConnected) {
+      Future.microtask(() {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      });
+    }
+
     final boards = context.watch<BLEProvider>().boards;
 
     if (bleProvider.shouldRefreshInfo) {
@@ -95,7 +103,9 @@ class InfoScreenState extends State<InfoScreen>
                                     .sendCommand("CMD:IDENTIFY:${board.mac};");
                               },
                               child: Section(
-                                title: board.role,
+                                title: board.role.isNotEmpty
+                                    ? board.role.toUpperCase()
+                                    : 'SECONDARY',
                                 content: Column(
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
@@ -125,6 +135,14 @@ class InfoScreenState extends State<InfoScreen>
                                           ),
                                         ],
                                       ),
+                                    Text(
+                                      "Tap to identify this board",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),

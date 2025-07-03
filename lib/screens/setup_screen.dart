@@ -115,35 +115,35 @@ class SetupScreenState extends State<SetupScreen>
     final currentDeepSleepTimeout = deepSleepTimeout;
 
     if (currentInitialBrightness != previousInitialBrightness) {
-      commands.add('BRIGHT:$currentInitialBrightness');
+      commands.add('SET:BRIGHT:$currentInitialBrightness');
     }
     if (currentBlockSize != previousBlockSize) {
-      commands.add('SIZE:$currentBlockSize');
+      commands.add('SET:SIZE:$currentBlockSize');
     }
     if (currentEffectSpeed != previousEffectSpeed) {
-      commands.add('SPEED:$currentEffectSpeed');
+      commands.add('SET:SPEED:$currentEffectSpeed');
     }
     if (currentCelebrationDuration != previousCelebrationDuration) {
-      commands.add('CELEB:$currentCelebrationDuration');
+      commands.add('SET:CELEB:$currentCelebrationDuration');
     }
     if (currentInactivityTimeout != previousInactivityTimeout) {
-      commands.add('TIMEOUT:$currentInactivityTimeout');
+      commands.add('SET:TIMEOUT:$currentInactivityTimeout');
     }
     if (currentDeepSleepTimeout != previousDeepSleepTimeout) {
-      commands.add('DEEPSLEEP:$currentDeepSleepTimeout');
+      commands.add('SET:DEEPSLEEP:$currentDeepSleepTimeout');
     }
     if (initialStartupColor != previousInitialStartupColor) {
       int red = (initialStartupColor.value >> 16) & 0xFF;
       int green = (initialStartupColor.value >> 8) & 0xFF;
       int blue = (initialStartupColor.value) & 0xFF;
-      commands.add('IC:$red,$green,$blue');
+      commands.add('SET:IC:$red,$green,$blue');
     }
 
     if (sportEffectColor1 != previousSportEffectColor1) {
       int red = (sportEffectColor1.value >> 16) & 0xFF;
       int green = (sportEffectColor1.value >> 8) & 0xFF;
       int blue = (sportEffectColor1.value) & 0xFF;
-      commands.add('SC1:$red,$green,$blue');
+      commands.add('SET:SC1:$red,$green,$blue');
       bleProvider.sendCommand('SC1:$red,$green,$blue');
     }
 
@@ -151,7 +151,7 @@ class SetupScreenState extends State<SetupScreen>
       int red = (sportEffectColor2.value >> 16) & 0xFF;
       int green = (sportEffectColor2.value >> 8) & 0xFF;
       int blue = (sportEffectColor2.value) & 0xFF;
-      commands.add('SC2:$red,$green,$blue');
+      commands.add('SET:SC2:$red,$green,$blue');
       bleProvider.sendCommand('SC2:$red,$green,$blue');
     }
     logger.i(
